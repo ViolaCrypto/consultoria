@@ -3,6 +3,12 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --color-primary: #1a56db;
+  --color-success: #057a55;
+  --color-warning: #c27803;
+  --color-danger: #c81e1e;
+  --color-sidebar-bg: #111827;
+  --color-sidebar-text: #f9fafb;
 }
 
 @theme inline {

@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+
+model Empresa {
+  id        String    @id @default(cuid())
+  nome      String
+  cnpj      String?
+  cnae      String?
+  setor     String?   // metalurgia, quimico, plastico, logistica...
+  cidade    String?
+  estado    String?
+  createdAt DateTime  @default(now())
+  projetos  Projeto[]
+}
+
+model Projeto {
+  id          String       @id @default(cuid())
+  nome        String
+  tipo        String       // diagnostico, adequacao_iso, homologacao...
+  status      String       @default("em_andamento")
+  empresaId   String
+  empresa     Empresa      @relation(fields: [empresaId], references: [id])
+  createdAt   DateTime     @default(now())
+  arquivos    Arquivo[]
+  anamnese    Anamnese?
+  avaliacoes  Avaliacao[]
+  documentos  DocProjeto[]
+}
+
+model Arquivo {
+  id        String   @id @default(cuid())
+  nome      String
+  url       String
+  tipo      String   // pdf, xlsx, imagem, docx...
+  tamanho   Int?
+  projetoId String
+  projeto   Projeto  @relation(fields: [projetoId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Anamnese {
+  id               String   @id @default(cuid())
+  projetoId        String   @unique
+  projeto          Projeto  @relation(fields: [projetoId], references: [id])
+  // campos universais
+  numFuncionarios  Int?
+  turnos           String?
+  processosPrincipais String?
+  // campos por setor (JSON flexível)
+  dadosSetor       Json?
+  // perfil gerado pela IA
+  perfilOperacional Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ModeloAvaliacao {
+  id          String      @id @default(cuid())
+  nome        String
+  descricao   String?
+  categoria   String?
+  versao      String      @default("1.0")
+  ativo       Boolean     @default(true)
+  requisitos  Requisito[]
+  avaliacoes  Avaliacao[]
+  createdAt   DateTime    @default(now())
+}
+
+model Requisito {
+  id               String          @id @default(cuid())
+  codigo           String?
+  titulo           String
+  descricao        String?
+  categoria        String?
+  peso             Float           @default(1.0)
+  ordem            Int             @default(0)
+  evidenciaEsperada String?
+  documentoEsperado String?
+  acaoRecomendada  String?
+  modeloId         String
+  modelo           ModeloAvaliacao @relation(fields: [modeloId], references: [id])
+  itensAvaliacao   ItemAvaliacao[]
+}
+
+model Avaliacao {
+  id        String          @id @default(cuid())
+  projetoId String
+  projeto   Projeto         @relation(fields: [projetoId], references: [id])
+  modeloId  String
+  modelo    ModeloAvaliacao @relation(fields: [modeloId], references: [id])
+  itens     ItemAvaliacao[]
+  createdAt DateTime        @default(now())
+}
+
+model ItemAvaliacao {
+  id            String    @id @default(cuid())
+  avaliacaoId   String
+  avaliacao     Avaliacao @relation(fields: [avaliacaoId], references: [id])
+  requisitoId   String
+  requisito     Requisito @relation(fields: [requisitoId], references: [id])
+  // atende / atende_parcialmente / nao_atende / nao_se_aplica / precisa_validacao
+  status        String    @default("precisa_validacao")
+  confiancaIA   String?   // alta / media / baixa / humano
+  observacao    String?
+  evidencias    String[]  // URLs dos arquivos vinculados
+  revisadoPor   String?
+  createdAt     DateTime  @default(now())
+}
+
+model DocProjeto {
+  id          String   @id @default(cuid())
+  projetoId   String
+  projeto     Projeto  @relation(fields: [projetoId], references: [id])
+  nome        String
+  tipo        String   // geravel_ia / semi_geravel / exigivel_cliente
+  status      String   @default("pendente")
+  // rascunho / em_revisao / aprovado / exportado / entregue
+  conteudo    String?  @db.Text
+  urlExportado String?
+  versao      Int      @default(1)
+  aprovadoPor String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

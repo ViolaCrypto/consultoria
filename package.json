@@ -4,23 +4,42 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed": "npx ts-node --project tsconfig.json scripts/seed.ts"
   },
   "dependencies": {
+    "@auth/prisma-adapter": "^2.11.2",
+    "@hookform/resolvers": "^5.4.0",
+    "@prisma/client": "^5.22.0",
+    "@vercel/blob": "^2.4.0",
+    "docx": "^9.7.1",
+    "file-saver": "^2.0.5",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^1.17.0",
     "next": "16.2.7",
+    "next-auth": "^4.24.14",
+    "openai": "^6.42.0",
+    "prisma": "^5.22.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-hook-form": "^7.77.0",
+    "react-markdown": "^10.1.0",
+    "uploadthing": "^7.7.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/file-saver": "^2.0.7",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

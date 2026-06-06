@@ -1,36 +1,116 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Plataforma Consultoria
 
-## Getting Started
+Plataforma interna para consultorias de SST e gestão ambiental, com cadastro de empresas, projetos, modelos de avaliação, gap analysis, documentos e agentes de IA.
 
-First, run the development server:
+## Requisitos
+
+- Node.js 20 ou superior
+- npm
+- Banco PostgreSQL
+- Chave da OpenAI para os agentes de IA
+
+## Variáveis de Ambiente
+
+Crie um arquivo `.env` na raiz do projeto com base no `.env.example`.
+
+```env
+DATABASE_URL=""
+OPENAI_API_KEY=""
+NEXTAUTH_SECRET=""
+NEXTAUTH_URL=""
+```
+
+Descrição:
+
+- `DATABASE_URL`: URL de conexão PostgreSQL usada pelo Prisma.
+- `OPENAI_API_KEY`: chave da OpenAI usada pelos agentes de perfil operacional, gap analysis e documentos.
+- `NEXTAUTH_SECRET`: segredo usado pelo NextAuth.
+- `NEXTAUTH_URL`: URL base da aplicação. Em desenvolvimento, use `http://localhost:3000` ou a porta local em uso. Na Vercel, use a URL de produção.
+
+## Setup Local
+
+Instale as dependências:
+
+```bash
+npm install
+```
+
+Gere o Prisma Client:
+
+```bash
+npx prisma generate
+```
+
+Sincronize o banco em desenvolvimento:
+
+```bash
+npx prisma db push
+```
+
+Opcionalmente, rode o seed com dados de teste:
+
+```bash
+npm run seed
+```
+
+Inicie o servidor local:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts
 
-## Learn More
+- `npm run dev`: inicia o Next.js em desenvolvimento.
+- `npm run build`: gera o Prisma Client e executa o build de produção.
+- `npm run start`: inicia a versão de produção após o build.
+- `npm run lint`: roda ESLint.
+- `npm run seed`: popula o banco com dados de teste.
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy na Vercel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Crie ou conecte o projeto na Vercel.
+2. Configure as variáveis de ambiente em `Project Settings > Environment Variables`:
+   - `DATABASE_URL`
+   - `OPENAI_API_KEY`
+   - `NEXTAUTH_SECRET`
+   - `NEXTAUTH_URL`
+3. Garanta que o banco PostgreSQL esteja acessível pela Vercel.
+4. Use o comando padrão de build:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build
+```
 
-## Deploy on Vercel
+5. Depois do primeiro deploy, rode as migrações ou sincronização do schema conforme o ambiente escolhido.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Para ambiente inicial sem migrations versionadas, use localmente:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npx prisma db push
+```
+
+Para produção com fluxo mais rigoroso, crie migrations Prisma antes do deploy:
+
+```bash
+npx prisma migrate dev --name init
+```
+
+Depois aplique em produção:
+
+```bash
+npx prisma migrate deploy
+```
+
+## Observações de Produção
+
+- Não suba `.env` para o repositório.
+- Configure `NEXTAUTH_URL` com a URL final da Vercel.
+- Os recursos de IA dependem de `OPENAI_API_KEY`.
+- O banco precisa conter as tabelas Prisma antes do uso da aplicação.

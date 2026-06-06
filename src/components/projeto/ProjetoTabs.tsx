@@ -1,0 +1,1280 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import ReactMarkdown from 'react-markdown'
+import { AnamneseForm, type AnamneseData } from '@/components/projeto/AnamneseForm'
+import { exportarPDF, exportarWord } from '@/lib/exportar'
+
+type ArquivoData = {
+  id: string
+  nome: string
+  url: string
+  tipo: string
+  tamanho: number | null
+  createdAt: string
+}
+
+type ModeloDisponivel = {
+  id: string
+  nome: string
+  categoria: string | null
+  versao: string
+  requisitosCount: number
+}
+
+type ItemAvaliacaoData = {
+  id: string
+  status: string
+  confiancaIA: string | null
+  observacao: string | null
+  requisito: {
+    id: string
+    codigo: string | null
+    titulo: string
+    descricao: string | null
+    evidenciaEsperada: string | null
+    documentoEsperado: string | null
+  }
+}
+
+type AvaliacaoData = {
+  id: string
+  modeloId: string
+  modelo: {
+    id: string
+    nome: string
+    categoria: string | null
+    versao: string
+    requisitos: {
+      id: string
+      codigo: string | null
+      titulo: string
+      descricao: string | null
+      categoria: string | null
+      peso: number
+      evidenciaEsperada: string | null
+      documentoEsperado: string | null
+    }[]
+  }
+  itens: ItemAvaliacaoData[]
+}
+
+type DocumentoData = {
+  id: string
+  nome: string
+  tipo: string
+  status: string
+  conteudo: string | null
+  updatedAt: string
+}
+
+type ProjetoData = {
+  id: string
+  nome: string
+  tipo: string
+  status: string
+  createdAt: string
+  empresa: {
+    id: string
+    nome: string
+  }
+  hasPerfilOperacional: boolean
+  arquivos: ArquivoData[]
+  anamnese: AnamneseData | null
+  avaliacoes: AvaliacaoData[]
+  documentos: DocumentoData[]
+  modelosDisponiveis: ModeloDisponivel[]
+}
+
+const tabs = [
+  'Visão Geral',
+  'Arquivos',
+  'Anamnese',
+  'Modelos de Avaliação',
+  'Gap Analysis',
+  'Documentos',
+]
+
+const statusOptions = [
+  { value: 'atende', label: 'Atende' },
+  { value: 'atende_parcialmente', label: 'Atende parcialmente' },
+  { value: 'nao_atende', label: 'Não atende' },
+  { value: 'nao_se_aplica', label: 'Não se aplica' },
+  { value: 'precisa_validacao', label: 'Precisa validação' },
+]
+
+export function ProjetoTabs({ projeto }: { projeto: ProjetoData }) {
+  const [activeTab, setActiveTab] = useState('Visão Geral')
+  const [selectedAvaliacaoId, setSelectedAvaliacaoId] = useState<string | null>(null)
+
+  function openGap(avaliacaoId: string) {
+    setSelectedAvaliacaoId(avaliacaoId)
+    setActiveTab('Gap Analysis')
+  }
+
+  return (
+    <div>
+      <div className="mt-8 flex gap-2 overflow-x-auto border-b border-slate-200">
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition ${
+              activeTab === tab
+                ? 'border-slate-950 text-slate-950'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-6">
+        {activeTab === 'Visão Geral' ? <VisaoGeral projeto={projeto} /> : null}
+        {activeTab === 'Arquivos' ? (
+          <ArquivosTab projetoId={projeto.id} arquivos={projeto.arquivos} />
+        ) : null}
+        {activeTab === 'Anamnese' ? (
+          <AnamneseForm projetoId={projeto.id} anamnese={projeto.anamnese} />
+        ) : null}
+        {activeTab === 'Modelos de Avaliação' ? (
+          <ModelosProjetoTab projeto={projeto} onAvaliar={openGap} />
+        ) : null}
+        {activeTab === 'Gap Analysis' ? (
+          <GapAnalysisTab
+            avaliacoes={projeto.avaliacoes}
+            hasPerfilOperacional={projeto.hasPerfilOperacional}
+            selectedAvaliacaoId={selectedAvaliacaoId}
+            onSelectAvaliacao={setSelectedAvaliacaoId}
+          />
+        ) : null}
+        {activeTab === 'Documentos' ? (
+          <DocumentosTab documentos={projeto.documentos} empresa={projeto.empresa} />
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function VisaoGeral({ projeto }: { projeto: ProjetoData }) {
+  return (
+    <section className="grid gap-4 md:grid-cols-4">
+      <Info label="Empresa" value={projeto.empresa.nome} />
+      <Info label="Tipo" value={projeto.tipo} />
+      <Info label="Status" value={projeto.status} />
+      <Info
+        label="Criado em"
+        value={new Date(projeto.createdAt).toLocaleDateString('pt-BR')}
+      />
+    </section>
+  )
+}
+
+function ModelosProjetoTab({
+  projeto,
+  onAvaliar,
+}: {
+  projeto: ProjetoData
+  onAvaliar: (avaliacaoId: string) => void
+}) {
+  const router = useRouter()
+  const [isOpen, setIsOpen] = useState(false)
+  const [selectedModelos, setSelectedModelos] = useState<string[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const linkedModelIds = new Set(projeto.avaliacoes.map((avaliacao) => avaliacao.modeloId))
+  const modelosNaoVinculados = projeto.modelosDisponiveis.filter(
+    (modelo) => !linkedModelIds.has(modelo.id),
+  )
+
+  async function vincularModelos() {
+    setError('')
+    setIsSubmitting(true)
+
+    const response = await fetch('/api/avaliacoes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projetoId: projeto.id,
+        modeloIds: selectedModelos,
+      }),
+    })
+
+    setIsSubmitting(false)
+
+    if (!response.ok) {
+      setError('Não foi possível vincular os modelos.')
+      return
+    }
+
+    setSelectedModelos([])
+    setIsOpen(false)
+    router.refresh()
+  }
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-950">
+            Modelos vinculados
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Escolha modelos para gerar avaliações e itens de gap analysis.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+        >
+          Vincular Modelo
+        </button>
+      </div>
+
+      {projeto.avaliacoes.length > 0 ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {projeto.avaliacoes.map((avaliacao) => {
+            const total = avaliacao.itens.length
+            const avaliados = avaliacao.itens.filter(
+              (item) => item.status !== 'precisa_validacao',
+            ).length
+
+            return (
+              <div
+                key={avaliacao.id}
+                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-950">
+                      {avaliacao.modelo.nome}
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {avaliacao.modelo.categoria || 'Sem categoria'} · v
+                      {avaliacao.modelo.versao}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                    {total} requisitos
+                  </span>
+                </div>
+                <div className="mt-5">
+                  <div className="mb-2 flex justify-between text-sm text-slate-600">
+                    <span>Progresso</span>
+                    <span>
+                      {avaliados} de {total}
+                    </span>
+                  </div>
+                  <Progress value={total ? (avaliados / total) * 100 : 0} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onAvaliar(avaliacao.id)}
+                  className="mt-5 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Avaliar
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
+          Nenhum modelo vinculado a este projeto.
+        </div>
+      )}
+
+      {isOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-8">
+          <div className="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-semibold text-slate-950">
+                  Vincular Modelo
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Selecione um ou mais modelos disponíveis.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="rounded-md px-2 py-1 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {modelosNaoVinculados.length > 0 ? (
+                modelosNaoVinculados.map((modelo) => (
+                  <label
+                    key={modelo.id}
+                    className="flex items-start gap-3 rounded-md border border-slate-200 p-3"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={selectedModelos.includes(modelo.id)}
+                      onChange={(event) => {
+                        setSelectedModelos((current) =>
+                          event.target.checked
+                            ? [...current, modelo.id]
+                            : current.filter((id) => id !== modelo.id),
+                        )
+                      }}
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-950">
+                        {modelo.nome}
+                      </span>
+                      <span className="block text-sm text-slate-500">
+                        {modelo.categoria || 'Sem categoria'} · {modelo.requisitosCount}{' '}
+                        requisitos
+                      </span>
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <div className="rounded-md border border-dashed border-slate-300 p-6 text-center text-sm text-slate-600">
+                  Todos os modelos disponíveis já estão vinculados.
+                </div>
+              )}
+            </div>
+
+            {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting || selectedModelos.length === 0}
+                onClick={vincularModelos}
+                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSubmitting ? 'Vinculando...' : 'Vincular selecionados'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function GapAnalysisTab({
+  avaliacoes,
+  hasPerfilOperacional,
+  selectedAvaliacaoId,
+  onSelectAvaliacao,
+}: {
+  avaliacoes: AvaliacaoData[]
+  hasPerfilOperacional: boolean
+  selectedAvaliacaoId: string | null
+  onSelectAvaliacao: (id: string | null) => void
+}) {
+  const router = useRouter()
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [isConfirming, setIsConfirming] = useState(false)
+  const [message, setMessage] = useState('')
+  const avaliacoesFiltradas = selectedAvaliacaoId
+    ? avaliacoes.filter((avaliacao) => avaliacao.id === selectedAvaliacaoId)
+    : avaliacoes
+  const itens = avaliacoesFiltradas.flatMap((avaliacao) =>
+    avaliacao.itens.map((item) => ({ ...item, avaliacao })),
+  )
+  const resumo = useMemo(() => {
+    const total = itens.length
+    const avaliados = itens.filter((item) => item.status !== 'precisa_validacao').length
+
+    return {
+      total,
+      avaliados,
+      atende: itens.filter((item) => item.status === 'atende').length,
+      parcial: itens.filter((item) => item.status === 'atende_parcialmente').length,
+      naoAtende: itens.filter((item) => item.status === 'nao_atende').length,
+      progresso: total ? (avaliados / total) * 100 : 0,
+    }
+  }, [itens])
+  const hasAiSuggestions = itens.some((item) =>
+    ['alta', 'media', 'baixa'].includes(item.confiancaIA || ''),
+  )
+
+  async function suggestWithAi() {
+    const target = selectedAvaliacaoId || avaliacoes[0]?.id
+
+    if (!target) {
+      return
+    }
+
+    setIsGenerating(true)
+    setMessage('')
+
+    const response = await fetch('/api/agentes/gap-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ avaliacaoId: target }),
+    })
+
+    setIsGenerating(false)
+
+    if (!response.ok) {
+      setMessage('Não foi possível gerar sugestões com IA.')
+      return
+    }
+
+    setMessage('Sugestões geradas. Confirme cada item antes de usar.')
+    router.refresh()
+  }
+
+  async function confirmAll() {
+    setIsConfirming(true)
+    setMessage('')
+
+    const response = await fetch('/api/itens-avaliacao', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        confirmarTodos: true,
+        avaliacaoIds: avaliacoesFiltradas.map((avaliacao) => avaliacao.id),
+      }),
+    })
+
+    setIsConfirming(false)
+
+    if (!response.ok) {
+      setMessage('Não foi possível confirmar os itens.')
+      return
+    }
+
+    setMessage('Itens confirmados como revisão humana.')
+    router.refresh()
+  }
+
+  if (avaliacoes.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
+        Vincule um modelo de avaliação para iniciar o Gap Analysis.
+      </div>
+    )
+  }
+
+  return (
+    <section>
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-950">Gap Analysis</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Avalie os requisitos dos modelos vinculados e gere pendências documentais.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <select
+              value={selectedAvaliacaoId ?? ''}
+              onChange={(event) => onSelectAvaliacao(event.target.value || null)}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+            >
+              <option value="">Todos os modelos</option>
+              {avaliacoes.map((avaliacao) => (
+                <option key={avaliacao.id} value={avaliacao.id}>
+                  {avaliacao.modelo.nome}
+                </option>
+              ))}
+            </select>
+            {hasPerfilOperacional ? (
+              <button
+                type="button"
+                onClick={suggestWithAi}
+                disabled={isGenerating}
+                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isGenerating ? 'Sugerindo...' : 'Sugerir com IA'}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={confirmAll}
+              disabled={isConfirming || itens.length === 0}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isConfirming ? 'Confirmando...' : 'Confirmar todos'}
+            </button>
+          </div>
+        </div>
+
+        {isGenerating ? (
+          <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-950" />
+            Gerando sugestões com IA...
+          </div>
+        ) : null}
+
+        {hasAiSuggestions ? (
+          <span className="mt-4 inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+            Sugerido por IA — confirme cada item
+          </span>
+        ) : null}
+
+        {message ? <p className="mt-4 text-sm text-slate-600">{message}</p> : null}
+
+        <div className="mt-5">
+          <div className="mb-2 flex justify-between text-sm text-slate-600">
+            <span>Progresso geral</span>
+            <span>
+              {resumo.avaliados} de {resumo.total} requisitos avaliados
+            </span>
+          </div>
+          <Progress value={resumo.progresso} />
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <Info label="Atendem" value={String(resumo.atende)} />
+          <Info label="Parciais" value={String(resumo.parcial)} />
+          <Info label="Não atendem" value={String(resumo.naoAtende)} />
+        </div>
+      </div>
+
+      <div className="grid gap-4">
+        {itens.map((item) => (
+          <GapItemCard key={item.id} item={item} modeloNome={item.avaliacao.modelo.nome} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function GapItemCard({
+  item,
+  modeloNome,
+}: {
+  item: ItemAvaliacaoData
+  modeloNome: string
+}) {
+  const router = useRouter()
+  const [status, setStatus] = useState(item.status)
+  const [observacao, setObservacao] = useState(item.observacao || '')
+  const [isSaving, setIsSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  async function saveItem() {
+    setIsSaving(true)
+    setMessage('')
+
+    const response = await fetch('/api/itens-avaliacao', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: item.id,
+        status,
+        observacao,
+      }),
+    })
+
+    setIsSaving(false)
+
+    if (!response.ok) {
+      setMessage('Erro ao salvar.')
+      return
+    }
+
+    setMessage('Salvo.')
+    router.refresh()
+  }
+
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            {modeloNome}
+          </p>
+          <h3 className="mt-2 text-lg font-semibold text-slate-950">
+            {item.requisito.codigo ? `${item.requisito.codigo} · ` : ''}
+            {item.requisito.titulo}
+          </h3>
+          {item.requisito.descricao ? (
+            <p className="mt-2 text-sm text-slate-600">{item.requisito.descricao}</p>
+          ) : null}
+        </div>
+        <ConfidenceBadge value={item.confiancaIA} />
+      </div>
+
+      {item.observacao?.startsWith('[IA]') ? (
+        <div className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+          Justificativa da IA: {item.observacao.replace('[IA]', '').trim()}
+        </div>
+      ) : null}
+
+      <dl className="mt-5 grid gap-4 md:grid-cols-2">
+        <SmallInfo
+          label="Evidência esperada"
+          value={item.requisito.evidenciaEsperada || 'Não informada'}
+        />
+        <SmallInfo
+          label="Documento esperado"
+          value={item.requisito.documentoEsperado || 'Não informado'}
+        />
+      </dl>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-[280px_1fr_auto] lg:items-end">
+        <div>
+          <label className="block text-sm font-medium text-slate-700" htmlFor={`status-${item.id}`}>
+            Status
+          </label>
+          <select
+            id={`status-${item.id}`}
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+          >
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label
+            className="block text-sm font-medium text-slate-700"
+            htmlFor={`observacao-${item.id}`}
+          >
+            Observação
+          </label>
+          <textarea
+            id={`observacao-${item.id}`}
+            rows={2}
+            value={observacao}
+            onChange={(event) => setObservacao(event.target.value)}
+            className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={saveItem}
+            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSaving ? 'Salvando...' : 'Salvar'}
+          </button>
+          {message ? <span className="text-sm text-slate-500">{message}</span> : null}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function DocumentosTab({
+  documentos,
+  empresa,
+}: {
+  documentos: DocumentoData[]
+  empresa: { nome: string }
+}) {
+  const grupos = [
+    { title: 'Pendentes', statuses: ['pendente'] },
+    { title: 'Em revisão', statuses: ['em_revisao', 'rascunho'] },
+    { title: 'Aprovados', statuses: ['aprovado', 'exportado', 'entregue'] },
+  ]
+
+  return (
+    <section className="grid gap-6">
+      {grupos.map((grupo) => {
+        const itens = documentos.filter((documento) =>
+          grupo.statuses.includes(documento.status),
+        )
+
+        return (
+          <div key={grupo.title}>
+            <h2 className="mb-3 text-xl font-semibold text-slate-950">{grupo.title}</h2>
+            {itens.length > 0 ? (
+              <div className="grid gap-3">
+                {itens.map((documento) => (
+                  <DocumentoCard
+                    key={documento.id}
+                    documento={documento}
+                    empresa={empresa}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">
+                Nenhum documento nesta etapa.
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+type ResultadoRevisao = {
+  aprovado: boolean
+  score: number
+  problemas: string[]
+  sugestoes: string[]
+  alertas_legais: string[]
+}
+
+function DocumentoCard({
+  documento,
+  empresa,
+}: {
+  documento: DocumentoData
+  empresa: { nome: string }
+}) {
+  const router = useRouter()
+  const [isApproving, setIsApproving] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [isReviewing, setIsReviewing] = useState(false)
+  const [forceApproval, setForceApproval] = useState(false)
+  const [review, setReview] = useState<ResultadoRevisao | null>(null)
+  const [error, setError] = useState('')
+  const canApprove =
+    documento.status !== 'aprovado' &&
+    (documento.status !== 'em_revisao' || !review || review.score >= 70 || forceApproval)
+
+  async function generate() {
+    setError('')
+    setIsGenerating(true)
+
+    const response = await fetch('/api/agentes/gerar-documento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        docProjetoId: documento.id,
+      }),
+    })
+
+    setIsGenerating(false)
+
+    if (!response.ok) {
+      setError('Não foi possível gerar o documento.')
+      return
+    }
+
+    router.refresh()
+  }
+
+  async function approve() {
+    setError('')
+    setIsApproving(true)
+
+    const response = await fetch(`/api/documentos/${documento.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'aprovado',
+      }),
+    })
+
+    setIsApproving(false)
+
+    if (response.ok) {
+      router.refresh()
+      return
+    }
+
+    setError('Não foi possível aprovar o documento.')
+  }
+
+  async function reviewDocument() {
+    setError('')
+    setIsReviewing(true)
+
+    const response = await fetch('/api/agentes/revisar-documento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        docProjetoId: documento.id,
+      }),
+    })
+
+    setIsReviewing(false)
+
+    if (!response.ok) {
+      setError('Não foi possível revisar o documento.')
+      return
+    }
+
+    setReview((await response.json()) as ResultadoRevisao)
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 className="font-semibold text-slate-950">{documento.nome}</h3>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge tone={documento.tipo === 'geravel_ia' ? 'blue' : 'amber'}>
+              {documento.tipo}
+            </Badge>
+            <Badge tone={statusTone(documento.status)}>
+              {statusLabel(documento.status)}
+            </Badge>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            disabled={isGenerating}
+            onClick={generate}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isGenerating ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-950" />
+                Gerando...
+              </span>
+            ) : documento.conteudo ? (
+              'Regenerar'
+            ) : (
+              'Gerar com IA'
+            )}
+          </button>
+          {documento.status === 'em_revisao' && documento.conteudo ? (
+            <button
+              type="button"
+              disabled={isReviewing}
+              onClick={reviewDocument}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isReviewing ? 'Revisando...' : 'Revisar com IA'}
+            </button>
+          ) : null}
+          {documento.status === 'aprovado' && documento.conteudo ? (
+            <>
+              <button
+                type="button"
+                onClick={() => exportarPDF(documento.conteudo || '', documento.nome, empresa)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Exportar PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => exportarWord(documento.conteudo || '', documento.nome, empresa)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Exportar Word
+              </button>
+            </>
+          ) : null}
+          {canApprove ? (
+            <button
+              type="button"
+              disabled={isApproving}
+              onClick={approve}
+              className="rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isApproving ? 'Salvando...' : 'Aprovar documento'}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+
+      {review ? (
+        <ReviewPanel
+          review={review}
+          forceApproval={forceApproval}
+          onForceApprovalChange={setForceApproval}
+        />
+      ) : null}
+
+      {documento.conteudo ? (
+        <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+          <div className="prose prose-sm max-w-none prose-slate">
+            <ReactMarkdown>{documento.conteudo}</ReactMarkdown>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ReviewPanel({
+  review,
+  forceApproval,
+  onForceApprovalChange,
+}: {
+  review: ResultadoRevisao
+  forceApproval: boolean
+  onForceApprovalChange: (value: boolean) => void
+}) {
+  const scoreTone =
+    review.score >= 70
+      ? 'bg-emerald-500'
+      : review.score >= 50
+        ? 'bg-amber-500'
+        : 'bg-red-500'
+
+  return (
+    <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h4 className="font-semibold text-slate-950">Revisão técnica por IA</h4>
+          <p className="mt-1 text-sm text-slate-600">Score: {review.score}/100</p>
+        </div>
+        <Badge tone={review.aprovado ? 'green' : 'amber'}>
+          {review.aprovado ? 'Aprovável' : 'Revisar'}
+        </Badge>
+      </div>
+
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
+        <div
+          className={`h-full rounded-full ${scoreTone}`}
+          style={{ width: `${Math.min(100, Math.max(0, review.score))}%` }}
+        />
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-3">
+        <ReviewList title="Problemas" tone="red" items={review.problemas} />
+        <ReviewList title="Sugestões" tone="amber" items={review.sugestoes} />
+        <ReviewList title="Alertas legais" tone="orange" items={review.alertas_legais} />
+      </div>
+
+      {review.score < 70 ? (
+        <label className="mt-5 flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={forceApproval}
+            onChange={(event) => onForceApprovalChange(event.target.checked)}
+          />
+          Forçar aprovação manual mesmo com score abaixo de 70
+        </label>
+      ) : null}
+    </div>
+  )
+}
+
+function ReviewList({
+  title,
+  items,
+  tone,
+}: {
+  title: string
+  items: string[]
+  tone: 'red' | 'amber' | 'orange'
+}) {
+  const toneClass = {
+    red: 'text-red-700',
+    amber: 'text-amber-700',
+    orange: 'text-orange-700',
+  }[tone]
+
+  return (
+    <div>
+      <h5 className={`text-sm font-semibold ${toneClass}`}>{title}</h5>
+      {items.length > 0 ? (
+        <ul className="mt-2 space-y-1 text-sm text-slate-700">
+          {items.map((item) => (
+            <li key={item}>• {item}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-slate-500">Nenhum item apontado.</p>
+      )}
+    </div>
+  )
+}
+
+function statusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pendente: 'Pendente',
+    em_revisao: 'Em revisão',
+    aprovado: 'Aprovado',
+    exportado: 'Exportado',
+    entregue: 'Entregue',
+  }
+
+  return labels[status] || status
+}
+
+function statusTone(status: string): 'amber' | 'green' | 'slate' {
+  if (status === 'em_revisao') {
+    return 'amber'
+  }
+
+  if (status === 'aprovado') {
+    return 'green'
+  }
+
+  return 'slate'
+}
+
+function ArquivosTab({
+  projetoId,
+  arquivos,
+}: {
+  projetoId: string
+  arquivos: ArquivoData[]
+}) {
+  const router = useRouter()
+  const [isOpen, setIsOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    setIsSubmitting(true)
+
+    const formData = new FormData(event.currentTarget)
+    const payload = {
+      ...Object.fromEntries(formData.entries()),
+      projetoId,
+    }
+
+    const response = await fetch('/api/arquivos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    setIsSubmitting(false)
+
+    if (!response.ok) {
+      setError('Não foi possível salvar o arquivo.')
+      return
+    }
+
+    setIsOpen(false)
+    router.refresh()
+  }
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-950">Arquivos</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Registre evidências e documentos vinculados ao projeto.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+        >
+          Upload
+        </button>
+      </div>
+
+      {arquivos.length > 0 ? (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Nome</th>
+                <th className="px-4 py-3">Tipo</th>
+                <th className="px-4 py-3">Data</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {arquivos.map((arquivo) => (
+                <tr key={arquivo.id}>
+                  <td className="px-4 py-3">
+                    <a
+                      href={arquivo.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-slate-950 hover:underline"
+                    >
+                      {arquivo.nome}
+                    </a>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{arquivo.tipo}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {new Date(arquivo.createdAt).toLocaleDateString('pt-BR')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
+          Nenhum arquivo registrado para este projeto.
+        </div>
+      )}
+
+      {isOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-8">
+          <div className="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-semibold text-slate-950">
+                  Registrar arquivo
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Informe os metadados do arquivo já enviado.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="rounded-md px-2 py-1 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <Field id="nome" label="Nome" required />
+              <Field id="url" label="URL" required />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field id="tipo" label="Tipo" required />
+                <Field id="tamanho" label="Tamanho em bytes" type="number" />
+              </div>
+              {error ? <p className="text-sm text-red-600">{error}</p> : null}
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSubmitting ? 'Salvando...' : 'Salvar arquivo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function Progress({ value }: { value: number }) {
+  return (
+    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+      <div
+        className="h-full rounded-full bg-slate-950 transition-all"
+        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+      />
+    </div>
+  )
+}
+
+function ConfidenceBadge({ value }: { value: string | null }) {
+  if (value === 'alta') {
+    return (
+      <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+        Alta
+      </span>
+    )
+  }
+
+  if (value === 'media') {
+    return (
+      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+        Média
+      </span>
+    )
+  }
+
+  if (value === 'baixa') {
+    return (
+      <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700">
+        Baixa
+      </span>
+    )
+  }
+
+  return (
+    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+      humano
+    </span>
+  )
+}
+
+function Badge({
+  children,
+  tone,
+}: {
+  children: React.ReactNode
+  tone: 'blue' | 'amber' | 'green' | 'slate'
+}) {
+  const classes = {
+    blue: 'bg-blue-50 text-blue-700',
+    amber: 'bg-amber-50 text-amber-700',
+    green: 'bg-emerald-50 text-emerald-700',
+    slate: 'bg-slate-100 text-slate-700',
+  }
+
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${classes[tone]}`}>
+      {children}
+    </span>
+  )
+}
+
+function Field({
+  id,
+  label,
+  type = 'text',
+  required = false,
+}: {
+  id: string
+  label: string
+  type?: string
+  required?: boolean
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        name={id}
+        type={type}
+        required={required}
+        className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+      />
+    </div>
+  )
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </dt>
+      <dd className="mt-2 text-sm font-medium text-slate-950">{value}</dd>
+    </div>
+  )
+}
+
+function SmallInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-slate-50 p-4">
+      <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </dt>
+      <dd className="mt-2 text-sm text-slate-700">{value}</dd>
+    </div>
+  )
+}
