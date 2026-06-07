@@ -18,6 +18,12 @@ export default async function ProjetoDetalhePage({
         select: {
           id: true,
           nome: true,
+          cnpj: true,
+          cnae: true,
+          setor: true,
+          setorCodigo: true,
+          cidade: true,
+          estado: true,
         },
       },
       arquivos: {
@@ -69,6 +75,7 @@ export default async function ProjetoDetalhePage({
     status: projeto.status,
     createdAt: projeto.createdAt.toISOString(),
     empresa: projeto.empresa,
+    dashboard: buildDashboardSnapshot(projeto),
     hasPerfilOperacional: Boolean(projeto.anamnese?.perfilOperacional),
     arquivos: projeto.arquivos.map((arquivo) => ({
       id: arquivo.id,
@@ -178,4 +185,61 @@ export default async function ProjetoDetalhePage({
       <ProjetoTabs projeto={projetoData} />
     </div>
   )
+}
+
+function buildDashboardSnapshot(projeto: {
+  avaliacoes: {
+    modelo: { nome: string }
+    itens: {
+      id: string
+      status: string
+      requisito: {
+        codigo: string | null
+        titulo: string
+        peso: number
+        documentoEsperado: string | null
+        acaoRecomendada: string | null
+      }
+    }[]
+  }[]
+  documentos: { status: string }[]
+}) {
+  const itens = projeto.avaliacoes.flatMap((avaliacao) =>
+    avaliacao.itens.map((item) => ({
+      id: item.id,
+      status: item.status,
+      modelo: avaliacao.modelo.nome,
+      requisito: {
+        codigo: item.requisito.codigo,
+        titulo: item.requisito.titulo,
+        peso: item.requisito.peso,
+        documentoEsperado: item.requisito.documentoEsperado,
+        acaoRecomendada: item.requisito.acaoRecomendada,
+      },
+    })),
+  )
+  const contagem = {
+    total: itens.length,
+    atende: itens.filter((item) => item.status === 'atende').length,
+    nao_atende: itens.filter((item) => item.status === 'nao_atende').length,
+    atende_parcialmente: itens.filter((item) => item.status === 'atende_parcialmente').length,
+    nao_se_aplica: itens.filter((item) => item.status === 'nao_se_aplica').length,
+    precisa_validacao: itens.filter((item) => item.status === 'precisa_validacao').length,
+  }
+  const avaliaveis = itens.filter((item) => item.status !== 'nao_se_aplica').length
+
+  return {
+    scoreConformidade: avaliaveis ? Math.round((contagem.atende / avaliaveis) * 100) : 0,
+    contagem,
+    gapsCriticos: itens
+      .filter((item) =>
+        ['nao_atende', 'atende_parcialmente', 'precisa_validacao'].includes(item.status),
+      )
+      .sort((a, b) => b.requisito.peso - a.requisito.peso)
+      .slice(0, 5),
+    documentosPorStatus: projeto.documentos.reduce<Record<string, number>>((acc, documento) => {
+      acc[documento.status] = (acc[documento.status] || 0) + 1
+      return acc
+    }, {}),
+  }
 }

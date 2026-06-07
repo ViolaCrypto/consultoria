@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
-import { FileImage, FileText, FileType } from 'lucide-react'
+import { CalendarDays, FileImage, FileText, FileType, ListChecks, Sparkles } from 'lucide-react'
 import { AnamneseForm, type AnamneseData } from '@/components/projeto/AnamneseForm'
 import { exportarPDF, exportarWord } from '@/lib/exportar'
 
@@ -93,6 +94,36 @@ type ProjetoData = {
   empresa: {
     id: string
     nome: string
+    cnpj?: string | null
+    cnae?: string | null
+    setor?: string | null
+    setorCodigo?: string | null
+    cidade?: string | null
+    estado?: string | null
+  }
+  dashboard: {
+    scoreConformidade: number
+    contagem: {
+      total: number
+      atende: number
+      nao_atende: number
+      atende_parcialmente: number
+      nao_se_aplica: number
+      precisa_validacao: number
+    }
+    gapsCriticos: {
+      id: string
+      status: string
+      modelo: string
+      requisito: {
+        codigo: string | null
+        titulo: string
+        peso: number
+        documentoEsperado: string | null
+        acaoRecomendada: string | null
+      }
+    }[]
+    documentosPorStatus: Record<string, number>
   }
   hasPerfilOperacional: boolean
   arquivos: ArquivoData[]
@@ -175,15 +206,180 @@ export function ProjetoTabs({ projeto }: { projeto: ProjetoData }) {
 }
 
 function VisaoGeral({ projeto }: { projeto: ProjetoData }) {
+  const router = useRouter()
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [isPlanning, setIsPlanning] = useState(false)
+  const [message, setMessage] = useState('')
+  const score = projeto.dashboard.scoreConformidade
+  const scoreTone =
+    score >= 75
+      ? 'border-emerald-500 text-emerald-700'
+      : score >= 45
+        ? 'border-amber-500 text-amber-700'
+        : 'border-red-500 text-red-700'
+
+  async function gerarDiagnostico() {
+    setMessage('')
+    setIsGenerating(true)
+
+    const response = await fetch('/api/agentes/diagnostico', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projetoId: projeto.id }),
+    })
+
+    setIsGenerating(false)
+
+    if (!response.ok) {
+      setMessage('Não foi possível gerar o diagnóstico inicial.')
+      return
+    }
+
+    setMessage('Diagnóstico inicial gerado em Documentos.')
+    router.refresh()
+  }
+
+  async function planejarDocumentos() {
+    setMessage('')
+    setIsPlanning(true)
+
+    const response = await fetch('/api/agentes/planejar-documentos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projetoId: projeto.id }),
+    })
+
+    setIsPlanning(false)
+
+    if (!response.ok) {
+      setMessage('Não foi possível planejar documentos.')
+      return
+    }
+
+    const data = (await response.json()) as { documentosCriados?: unknown[] }
+    setMessage(`Planejamento concluído. ${data.documentosCriados?.length || 0} documentos criados.`)
+    router.refresh()
+  }
+
   return (
-    <section className="grid gap-4 md:grid-cols-4">
-      <Info label="Empresa" value={projeto.empresa.nome} />
-      <Info label="Tipo" value={projeto.tipo} />
-      <Info label="Status" value={projeto.status} />
-      <Info
-        label="Criado em"
-        value={new Date(projeto.createdAt).toLocaleDateString('pt-BR')}
-      />
+    <section className="grid gap-6">
+      <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <div
+            className={`mx-auto flex h-40 w-40 items-center justify-center rounded-full border-[10px] ${scoreTone}`}
+          >
+            <span className="text-4xl font-semibold">{score}%</span>
+          </div>
+          <h2 className="mt-5 text-lg font-semibold text-slate-950">
+            Score de conformidade
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Percentual dos requisitos avaliáveis que atendem plenamente.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <Info label="Total requisitos" value={String(projeto.dashboard.contagem.total)} />
+          <Info label="Atendem" value={String(projeto.dashboard.contagem.atende)} />
+          <Info label="Não atendem" value={String(projeto.dashboard.contagem.nao_atende)} />
+          <Info label="Parciais" value={String(projeto.dashboard.contagem.atende_parcialmente)} />
+          <Info label="Não avaliados" value={String(projeto.dashboard.contagem.precisa_validacao)} />
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-950">Ações executivas</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Gere o relatório de diagnóstico e crie uma lista inteligente de documentos.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={gerarDiagnostico}
+              disabled={isGenerating}
+              className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              <Sparkles className="h-4 w-4" />
+              {isGenerating ? 'Gerando...' : 'Gerar Diagnóstico Inicial'}
+            </button>
+            <button
+              type="button"
+              onClick={planejarDocumentos}
+              disabled={isPlanning}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              <ListChecks className="h-4 w-4" />
+              {isPlanning ? 'Planejando...' : 'Planejar Documentos'}
+            </button>
+            <Link
+              href={`/empresas/${projeto.empresa.id}/projetos/${projeto.id}/entrega`}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Ver Entrega Final
+            </Link>
+          </div>
+        </div>
+        {message ? <p className="mt-4 text-sm text-slate-600">{message}</p> : null}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-semibold text-slate-950">5 gaps mais críticos</h2>
+          <div className="mt-4 space-y-3">
+            {projeto.dashboard.gapsCriticos.length > 0 ? (
+              projeto.dashboard.gapsCriticos.map((gap) => (
+                <article key={gap.id} className="rounded-md bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={gap.status === 'nao_atende' ? 'red' : 'amber'}>
+                      {gap.status}
+                    </Badge>
+                    <span className="text-xs text-slate-500">{gap.modelo}</span>
+                    <span className="text-xs text-slate-500">Peso {gap.requisito.peso}</span>
+                  </div>
+                  <h3 className="mt-2 font-medium text-slate-950">
+                    {gap.requisito.codigo ? `${gap.requisito.codigo} · ` : ''}
+                    {gap.requisito.titulo}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {gap.requisito.acaoRecomendada || 'Priorizar análise e plano de ação.'}
+                  </p>
+                </article>
+              ))
+            ) : (
+              <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">
+                Nenhum gap crítico identificado.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-slate-950">
+            <CalendarDays className="h-5 w-5" />
+            Timeline
+          </h2>
+          <div className="mt-4 space-y-4 text-sm">
+            <SmallInfo
+              label="Criado em"
+              value={new Date(projeto.createdAt).toLocaleDateString('pt-BR')}
+            />
+            <SmallInfo label="Status" value={projeto.status} />
+            <SmallInfo
+              label="Empresa"
+              value={`${projeto.empresa.nome} · ${projeto.empresa.setor || 'setor não informado'}`}
+            />
+            <SmallInfo
+              label="Documentos"
+              value={Object.entries(projeto.dashboard.documentosPorStatus)
+                .map(([status, total]) => `${status}: ${total}`)
+                .join(' · ') || 'Nenhum documento'}
+            />
+          </div>
+        </div>
+      </div>
     </section>
   )
 }
