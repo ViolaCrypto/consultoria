@@ -1,7 +1,15 @@
-import { openai } from '@/lib/openai'
+import { executarComRaciocinio } from '@/lib/agents/base/agenteCOT'
+import { gerarComAutoRevisao } from '@/lib/agents/base/agenteAutoRevisor'
+import { gerarInventarioRiscos } from '@/lib/agents/documentos/inventarioRiscos'
+import { gerarMatrizAspectosImpactos } from '@/lib/agents/documentos/matrizAspectosImpactos'
+import { gerarPGRS } from '@/lib/agents/documentos/pgrs'
+import { gerarPlanoEmergencia } from '@/lib/agents/documentos/planoEmergencia'
+import { montarContextoCompleto } from '@/lib/contextoDocumental'
 import { buscarPadroesSetor, normalizarSetor } from '@/lib/memoria'
 
 type DocProjetoInput = {
+  id?: string
+  projetoId?: string
   nome: string
   tipo: string
   gaps?: {
@@ -10,6 +18,44 @@ type DocProjetoInput = {
     justificativa: string | null
     documentoEsperado: string | null
   }[]
+}
+
+export type DocumentoGerado = {
+  conteudo: string
+  metadados: {
+    raciocinioIA?: string
+    autoRevisao?: unknown
+    agente?: string
+    geradoEm: string
+  }
+}
+
+function formatarContextoDocumental(contexto: Awaited<ReturnType<typeof montarContextoCompleto>>) {
+  if (!contexto) {
+    return 'Contexto documental disponível: não localizado.'
+  }
+
+  return [
+    `Qualidade do contexto: ${contexto.qualidadeContexto}%`,
+    'Anamnese estruturada:',
+    JSON.stringify(contexto.anamnese?.dadosSetor || {}, null, 2),
+    '',
+    'Arquivos processados e contexto extraído:',
+    contexto.arquivosProcessados.length
+      ? JSON.stringify(
+          contexto.arquivosProcessados.map((arquivo) => ({
+            nome: arquivo.nome,
+            tipo: arquivo.tipo,
+            metadados: arquivo.metadados,
+          })),
+          null,
+          2,
+        )
+      : 'Nenhum arquivo processado por IA.',
+    '',
+    'Ontologia do setor:',
+    JSON.stringify(contexto.ontologia, null, 2),
+  ].join('\n')
 }
 
 type EmpresaInput = {
@@ -93,13 +139,125 @@ function promptForDocument(name: string) {
   }
 }
 
+function detectarDocumentoEspecializado(nome: string) {
+  const normalized = nome.toLowerCase()
+
+  if (
+    normalized.includes('matriz de aspectos') ||
+    normalized.includes('aspectos e impactos') ||
+    normalized.includes('impactos ambientais')
+  ) {
+    return 'matrizAspectosImpactos'
+  }
+
+  if (
+    normalized.includes('inventário de riscos') ||
+    normalized.includes('inventario de riscos') ||
+    normalized.includes('inventário de risco') ||
+    normalized.includes('inventario de risco')
+  ) {
+    return 'inventarioRiscos'
+  }
+
+  if (
+    normalized.includes('plano de emergência') ||
+    normalized.includes('plano de emergencia') ||
+    normalized.includes('pae')
+  ) {
+    return 'planoEmergencia'
+  }
+
+  if (
+    normalized.includes('pgrs') ||
+    normalized.includes('gerenciamento de resíduos') ||
+    normalized.includes('gerenciamento de residuos')
+  ) {
+    return 'pgrs'
+  }
+
+  return null
+}
+
+function criteriosPorDocumento(nome: string) {
+  const normalized = nome.toLowerCase()
+
+  if (normalized.includes('política ambiental') || normalized.includes('politica ambiental')) {
+    return [
+      'Menciona setor real?',
+      'Menciona aspectos ambientais específicos?',
+      'Tem compromisso com legislação?',
+      'Tem data e assinatura prevista?',
+    ]
+  }
+
+  if (
+    normalized.includes('matriz de aspectos') ||
+    normalized.includes('aspectos e impactos')
+  ) {
+    return ['Tem processo → aspecto → impacto → significância → controle?']
+  }
+
+  if (
+    normalized.includes('plano de emergência') ||
+    normalized.includes('plano de emergencia')
+  ) {
+    return [
+      'Tem cenários específicos?',
+      'Tem responsáveis nominais ou papéis definidos?',
+      'Tem recursos listados?',
+      'Tem fluxo de acionamento?',
+    ]
+  }
+
+  return [
+    'Usa dados reais da empresa?',
+    'Evita afirmações sem evidência?',
+    'Indica lacunas como precisa validação?',
+    'Está estruturado em markdown profissional?',
+  ]
+}
+
 export async function gerarDocumento(
   docProjeto: DocProjetoInput,
   empresa: EmpresaInput,
   anamnese: AnamneseInput | null,
   perfilOperacional: unknown,
-) {
+): Promise<DocumentoGerado> {
   const prompt = promptForDocument(docProjeto.nome)
+  const contextoDocumental = docProjeto.projetoId
+    ? await montarContextoCompleto(docProjeto.projetoId)
+    : null
+  const contextoCompleto = [
+    'Contexto documental disponível:',
+    formatarContextoDocumental(contextoDocumental),
+    '',
+    baseContext(docProjeto, empresa, anamnese, perfilOperacional),
+    docProjeto.gaps?.length
+      ? `\nGaps do projeto:\n${JSON.stringify(docProjeto.gaps)}`
+      : '\nGaps do projeto: nenhum gap informado.',
+  ].join('\n')
+  const agenteEspecializado = detectarDocumentoEspecializado(docProjeto.nome)
+
+  if (agenteEspecializado === 'matrizAspectosImpactos') {
+    const gerado = await gerarMatrizAspectosImpactos(contextoCompleto, docProjeto.id)
+    return { ...gerado, metadados: { ...gerado.metadados, geradoEm: new Date().toISOString() } }
+  }
+
+  if (agenteEspecializado === 'inventarioRiscos') {
+    const gerado = await gerarInventarioRiscos(contextoCompleto, docProjeto.id)
+    return { ...gerado, metadados: { ...gerado.metadados, geradoEm: new Date().toISOString() } }
+  }
+
+  if (agenteEspecializado === 'planoEmergencia') {
+    const gerado = await gerarPlanoEmergencia(contextoCompleto, docProjeto.id)
+    return { ...gerado, metadados: { ...gerado.metadados, geradoEm: new Date().toISOString() } }
+  }
+
+  if (agenteEspecializado === 'pgrs') {
+    const gerado = await gerarPGRS(contextoCompleto, docProjeto.id)
+    return { ...gerado, metadados: { ...gerado.metadados, geradoEm: new Date().toISOString() } }
+  }
+
   const setorReferencia = normalizarSetor(empresa.setorCodigo || empresa.setor)
   const padroesSetor = await buscarPadroesSetor(
     setorReferencia,
@@ -123,35 +281,35 @@ export async function gerarDocumento(
       ].join('\n\n')
     : 'Nenhum documento aprovado anterior encontrado para este setor/tipo.'
 
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    max_tokens: 3000,
-    messages: [
-      {
-        role: 'system',
-        content: prompt.system,
-      },
-      {
-        role: 'user',
-        content: [
-          prompt.userInstruction,
-          'Use esses documentos aprovados como referência de qualidade e especificidade quando existirem.',
-          'Retorne somente o conteúdo do documento em Markdown estruturado.',
-          '',
-          referencias,
-          '',
-          baseContext(docProjeto, empresa, anamnese, perfilOperacional),
-          gaps,
-        ].join('\n'),
-      },
-    ],
-  })
+  const userPrompt = [
+    prompt.userInstruction,
+    'Use esses documentos aprovados como referência de qualidade e especificidade quando existirem.',
+    'Retorne somente o conteúdo do documento em Markdown estruturado.',
+    '',
+    referencias,
+    '',
+    contextoCompleto,
+    gaps,
+  ].join('\n')
+  const { raciocinio } = await executarComRaciocinio(
+    prompt.system,
+    userPrompt,
+    undefined,
+    { docProjetoId: docProjeto.id, maxTokens: 3500 },
+  )
+  const autoRevisao = await gerarComAutoRevisao(
+    userPrompt,
+    contextoCompleto,
+    criteriosPorDocumento(docProjeto.nome),
+  )
 
-  const content = completion.choices[0]?.message.content
-
-  if (!content) {
-    throw new Error('A OpenAI não retornou conteúdo para o documento.')
+  return {
+    conteudo: autoRevisao.documento,
+    metadados: {
+      raciocinioIA: raciocinio,
+      autoRevisao,
+      agente: 'genericoComCOT',
+      geradoEm: new Date().toISOString(),
+    },
   }
-
-  return content
 }

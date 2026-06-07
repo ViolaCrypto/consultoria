@@ -16,6 +16,18 @@ const anamneseSchema = z.object({
   produtosQuimicos: z.enum(['sim', 'não']).optional().nullable(),
   residuosPerigosos: z.enum(['sim', 'não', 'não sabe']).optional().nullable(),
   observacoesGerais: z.string().trim().optional().nullable(),
+  documentosExistentes: z
+    .record(
+      z.string(),
+      z.object({
+        possui: z.boolean().optional(),
+        dataUltimaRevisao: z.string().trim().optional().nullable(),
+        responsavelTecnico: z.string().trim().optional().nullable(),
+        observacoes: z.string().trim().optional().nullable(),
+        arquivoUrl: z.string().trim().optional().nullable(),
+      }),
+    )
+    .optional(),
 })
 
 function buildData(data: z.infer<typeof anamneseSchema>) {
@@ -30,6 +42,7 @@ function buildData(data: z.infer<typeof anamneseSchema>) {
       produtosQuimicos: data.produtosQuimicos || null,
       residuosPerigosos: data.residuosPerigosos || null,
       observacoesGerais: data.observacoesGerais || null,
+      documentosExistentes: data.documentosExistentes || {},
     },
   }
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { montarContextoCompleto } from '@/lib/contextoDocumental'
 import { openai } from '@/lib/openai'
 
 type RequisitoInput = {
@@ -12,6 +13,7 @@ type RequisitoInput = {
 }
 
 type AvaliacaoInput = {
+  projetoId?: string
   modelo: {
     nome: string
     categoria: string | null
@@ -53,6 +55,9 @@ export async function gerarGapAnalysis(
   empresa: EmpresaInput,
 ): Promise<SugestaoGapAnalysis[]> {
   const requisitos = avaliacao.itens.map((item) => item.requisito)
+  const contextoDocumental = avaliacao.projetoId
+    ? await montarContextoCompleto(avaliacao.projetoId)
+    : null
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
@@ -78,6 +83,18 @@ export async function gerarGapAnalysis(
           '',
           'Perfil operacional:',
           JSON.stringify(perfilOperacional),
+          '',
+          'Contexto documental disponível:',
+          JSON.stringify(
+            {
+              qualidadeContexto: contextoDocumental?.qualidadeContexto,
+              anamneseEstruturada: contextoDocumental?.anamnese?.dadosSetor,
+              arquivosProcessados: contextoDocumental?.arquivosProcessados,
+              ontologia: contextoDocumental?.ontologia,
+            },
+            null,
+            2,
+          ),
           '',
           'Requisitos para avaliar:',
           JSON.stringify(requisitos),

@@ -212,6 +212,7 @@ model DocProjeto {
   status      String   @default("pendente")
   // rascunho / em_revisao / aprovado / exportado / entregue
   conteudo    String?  @db.Text
+  metadados   Json?
   urlExportado String?
   versao      Int      @default(1)
   aprovadoPor String?

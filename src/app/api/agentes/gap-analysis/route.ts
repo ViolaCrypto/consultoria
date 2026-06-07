@@ -46,6 +46,7 @@ export async function POST(request: Request) {
 
     const sugestoes = await gerarGapAnalysis(
       {
+        projetoId: avaliacao.projetoId,
         modelo: {
           nome: avaliacao.modelo.nome,
           categoria: avaliacao.modelo.categoria,

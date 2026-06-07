@@ -1,4 +1,14 @@
 import { openai } from '@/lib/openai'
+import { montarContextoCompleto } from '@/lib/contextoDocumental'
+
+function getProjetoId(projeto: unknown) {
+  if (projeto && typeof projeto === 'object' && 'id' in projeto) {
+    const id = (projeto as { id?: unknown }).id
+    return typeof id === 'string' ? id : null
+  }
+
+  return null
+}
 
 export async function gerarDiagnosticoInicial(
   projeto: unknown,
@@ -7,6 +17,9 @@ export async function gerarDiagnosticoInicial(
   perfilOperacional: unknown,
   gapAnalysis: unknown,
 ) {
+  const projetoId = getProjetoId(projeto)
+  const contextoDocumental = projetoId ? await montarContextoCompleto(projetoId) : null
+
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     max_tokens: 4000,
@@ -38,6 +51,18 @@ export async function gerarDiagnosticoInicial(
               anamnese,
               perfilOperacional,
               gapAnalysis,
+            },
+            null,
+            2,
+          ),
+          '',
+          'Contexto documental disponível:',
+          JSON.stringify(
+            {
+              qualidadeContexto: contextoDocumental?.qualidadeContexto,
+              anamneseEstruturada: contextoDocumental?.anamnese?.dadosSetor,
+              arquivosProcessados: contextoDocumental?.arquivosProcessados,
+              ontologia: contextoDocumental?.ontologia,
             },
             null,
             2,

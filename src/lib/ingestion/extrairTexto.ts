@@ -32,17 +32,25 @@ export async function extrairTextoImagem(buffer: Buffer) {
 }
 
 export function detectarTipoDocumento(texto: string, nomeArquivo: string) {
-  const content = `${nomeArquivo} ${texto}`.toLowerCase()
+  const content = `${nomeArquivo} ${texto}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  if (/\bnr[-\s]?\d{1,2}\b/.test(content) && /(treinamento|certificado|capacitacao)/.test(content)) {
+    return 'treinamento_nr'
+  }
 
   const checks: Array<[string, string[]]> = [
-    ['licenca_ambiental', ['licença ambiental', 'licenca ambiental', 'cetESb'.toLowerCase(), 'órgão ambiental', 'orgao ambiental', 'licença de operação', 'licenca de operacao']],
-    ['pgr', ['programa de gerenciamento de riscos', 'pgr', 'gro', 'inventário de riscos', 'inventario de riscos']],
-    ['pcmso', ['programa de controle médico', 'programa de controle medico', 'pcmso', 'exame clínico ocupacional', 'exame clinico ocupacional']],
+    ['pgr', ['pgr', 'programa de gerenciamento', 'programa de gerenciamento de riscos', 'gro', 'inventario de riscos']],
+    ['pcmso', ['pcmso', 'programa de controle medico', 'programa de controle medico de saude ocupacional', 'exame clinico ocupacional']],
+    ['licenca_ambiental', ['licenca ambiental', 'licenca de operacao', 'licenca previa', 'licenca de instalacao', ' lo ', ' lp ', ' li ', 'cetesb', 'orgao ambiental']],
     ['avcb', ['avcb', 'auto de vistoria do corpo de bombeiros', 'clcb', 'corpo de bombeiros']],
-    ['alvara', ['alvará', 'alvara', 'licença de funcionamento', 'licenca de funcionamento', 'prefeitura municipal']],
-    ['certificado_treinamento', ['certificado de treinamento', 'certificamos que', 'treinamento nr', 'capacitação', 'capacitacao']],
-    ['fispq', ['fispq', 'ficha de informação de segurança', 'ficha de informacao de seguranca', 'sds', 'gqs', 'produto químico']],
-    ['aso', ['aso', 'atestado de saúde ocupacional', 'atestado de saude ocupacional', 'apto', 'inapto']],
+    ['fispq', ['fispq', 'ficha de seguranca', 'ficha de informacao de seguranca', 'sds', 'produto quimico']],
+    ['aso', ['aso', 'atestado de saude', 'atestado de saude ocupacional', 'apto', 'inapto']],
+    ['alvara', ['alvara', 'licenca de funcionamento', 'prefeitura municipal']],
+    ['plano_emergencia', ['plano de emergencia', 'pae', 'atendimento a emergencia', 'resposta a emergencia']],
+    ['certificado_treinamento', ['certificado de treinamento', 'certificamos que', 'treinamento', 'capacitacao']],
   ]
 
   for (const [tipo, keywords] of checks) {

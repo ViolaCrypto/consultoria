@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { gerarDocumento } from '@/lib/agents/geradorDocumentos'
 import { prisma } from '@/lib/prisma'
@@ -54,8 +55,10 @@ export async function POST(request: Request) {
       })),
     )
 
-    const conteudo = await gerarDocumento(
+    const documentoGerado = await gerarDocumento(
       {
+        id: docProjeto.id,
+        projetoId: docProjeto.projetoId,
         nome: docProjeto.nome,
         tipo: docProjeto.tipo,
         gaps,
@@ -82,7 +85,10 @@ export async function POST(request: Request) {
     const updated = await prisma.docProjeto.update({
       where: { id: docProjetoId },
       data: {
-        conteudo,
+        conteudo: documentoGerado.conteudo,
+        metadados: JSON.parse(
+          JSON.stringify(documentoGerado.metadados),
+        ) as Prisma.InputJsonValue,
         status: 'em_revisao',
       },
     })

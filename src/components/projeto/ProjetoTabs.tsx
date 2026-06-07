@@ -6,6 +6,7 @@ import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import { CalendarDays, FileImage, FileText, FileType, ListChecks, Sparkles } from 'lucide-react'
 import { AnamneseForm, type AnamneseData } from '@/components/projeto/AnamneseForm'
+import { ZonaIngestao } from '@/components/projeto/ZonaIngestao'
 import { exportarPDF, exportarWord } from '@/lib/exportar'
 
 type ArquivoAnalise = {
@@ -18,7 +19,16 @@ type ArquivoAnalise = {
     resumo?: string
     informacoes_relevantes?: string[]
     requisitos_atendidos?: string[]
+    dados_especificos?: Record<string, unknown> | null
   }
+}
+
+type DocumentoExistente = {
+  possui?: boolean
+  dataUltimaRevisao?: string | null
+  responsavelTecnico?: string | null
+  observacoes?: string | null
+  arquivoUrl?: string | null
 }
 
 type ArquivoData = {
@@ -82,6 +92,20 @@ type DocumentoData = {
   tipo: string
   status: string
   conteudo: string | null
+  metadados: {
+    raciocinioIA?: string
+    agente?: string
+    geradoEm?: string
+    autoRevisao?: {
+      score?: number
+      revisoes?: {
+        iteracao: number
+        score: number
+        problemas: string[]
+        melhorias: string[]
+      }[]
+    }
+  } | null
   updatedAt: string
 }
 
@@ -133,6 +157,20 @@ type ProjetoData = {
   modelosDisponiveis: ModeloDisponivel[]
 }
 
+const documentosContexto = [
+  { key: 'pgr', termos: ['pgr', 'programa de gerenciamento de riscos'] },
+  { key: 'pcmso', termos: ['pcmso'] },
+  { key: 'licencaAmbiental', termos: ['licenca ambiental', 'licença ambiental'] },
+  { key: 'avcbClcb', termos: ['avcb', 'clcb'] },
+  { key: 'alvaraFuncionamento', termos: ['alvara', 'alvará'] },
+  { key: 'planoEmergencia', termos: ['plano de emergencia', 'plano de emergência'] },
+  {
+    key: 'inventarioProdutosQuimicos',
+    termos: ['inventario de produtos quimicos', 'inventário de produtos químicos', 'fispq'],
+  },
+  { key: 'matrizTreinamentos', termos: ['matriz de treinamentos', 'treinamento'] },
+]
+
 const tabs = [
   'Visão Geral',
   'Arquivos',
@@ -150,9 +188,52 @@ const statusOptions = [
   { value: 'precisa_validacao', label: 'Precisa validação' },
 ]
 
+function normalizarTexto(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function arquivoCorresponde(arquivo: ArquivoData, termos: string[]) {
+  const texto = normalizarTexto(
+    [
+      arquivo.nome,
+      arquivo.tipo,
+      arquivo.metadados?.tipoDetectado,
+      arquivo.metadados?.analise?.tipo_confirmado,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  )
+
+  return termos.some((termo) => texto.includes(normalizarTexto(termo)))
+}
+
+function calcularQualidadeContexto(projeto: ProjetoData) {
+  const dadosSetor = projeto.anamnese?.dadosSetor as
+    | { documentosExistentes?: Record<string, DocumentoExistente> }
+    | null
+  const documentosExistentes = dadosSetor?.documentosExistentes || {}
+  const totalPossivel = documentosContexto.length * 2
+  const pontos = documentosContexto.reduce((acc, documento) => {
+    const declarado = documentosExistentes[documento.key]?.possui ? 1 : 0
+    const processado = projeto.arquivos.some(
+      (arquivo) => arquivo.metadados && arquivoCorresponde(arquivo, documento.termos),
+    )
+      ? 1
+      : 0
+
+    return acc + declarado + processado
+  }, 0)
+
+  return Math.round((pontos / totalPossivel) * 100)
+}
+
 export function ProjetoTabs({ projeto }: { projeto: ProjetoData }) {
   const [activeTab, setActiveTab] = useState('Visão Geral')
   const [selectedAvaliacaoId, setSelectedAvaliacaoId] = useState<string | null>(null)
+  const qualidadeContexto = calcularQualidadeContexto(projeto)
 
   function openGap(avaliacaoId: string) {
     setSelectedAvaliacaoId(avaliacaoId)
@@ -161,6 +242,31 @@ export function ProjetoTabs({ projeto }: { projeto: ProjetoData }) {
 
   return (
     <div>
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-950">
+              Qualidade do contexto: {qualidadeContexto}%
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              Baseado nos documentos chave declarados e nos arquivos já analisados por IA.
+            </p>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 sm:w-56">
+            <div
+              className={`h-full rounded-full ${
+                qualidadeContexto >= 70
+                  ? 'bg-emerald-600'
+                  : qualidadeContexto >= 40
+                    ? 'bg-amber-500'
+                    : 'bg-red-600'
+              }`}
+              style={{ width: `${qualidadeContexto}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
       <div className="mt-8 flex gap-2 overflow-x-auto border-b border-slate-200">
         {tabs.map((tab) => (
           <button
@@ -952,6 +1058,7 @@ function DocumentoCard({
   const [isGenerating, setIsGenerating] = useState(false)
   const [isReviewing, setIsReviewing] = useState(false)
   const [forceApproval, setForceApproval] = useState(false)
+  const [showReasoning, setShowReasoning] = useState(false)
   const [review, setReview] = useState<ResultadoRevisao | null>(null)
   const [error, setError] = useState('')
   const canApprove =
@@ -1066,6 +1173,15 @@ function DocumentoCard({
               {isReviewing ? 'Revisando...' : 'Revisar com IA'}
             </button>
           ) : null}
+          {documento.metadados?.raciocinioIA ? (
+            <button
+              type="button"
+              onClick={() => setShowReasoning((value) => !value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              {showReasoning ? 'Ocultar raciocínio' : 'Ver raciocínio da IA'}
+            </button>
+          ) : null}
           {documento.status === 'aprovado' && documento.conteudo ? (
             <>
               <button
@@ -1105,6 +1221,49 @@ function DocumentoCard({
           forceApproval={forceApproval}
           onForceApprovalChange={setForceApproval}
         />
+      ) : null}
+
+      {showReasoning && documento.metadados?.raciocinioIA ? (
+        <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="font-semibold text-slate-950">Raciocínio técnico da IA</h4>
+            {documento.metadados.agente ? (
+              <Badge tone="amber">{documento.metadados.agente}</Badge>
+            ) : null}
+            {documento.metadados.autoRevisao?.score !== undefined ? (
+              <Badge tone={documento.metadados.autoRevisao.score >= 75 ? 'green' : 'red'}>
+                Auto-revisão {documento.metadados.autoRevisao.score}/100
+              </Badge>
+            ) : null}
+          </div>
+          <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">
+            {documento.metadados.raciocinioIA}
+          </p>
+          {documento.metadados.autoRevisao?.revisoes?.length ? (
+            <div className="mt-4 border-t border-amber-200 pt-4">
+              <h5 className="text-sm font-semibold text-slate-950">Loop de auto-revisão</h5>
+              <div className="mt-2 space-y-3">
+                {documento.metadados.autoRevisao.revisoes.map((revisao) => (
+                  <div key={revisao.iteracao} className="rounded-md bg-white p-3">
+                    <p className="text-sm font-medium text-slate-950">
+                      Iteração {revisao.iteracao} · score {revisao.score}/100
+                    </p>
+                    {revisao.problemas.length ? (
+                      <p className="mt-1 text-xs text-red-700">
+                        Problemas: {revisao.problemas.join('; ')}
+                      </p>
+                    ) : null}
+                    {revisao.melhorias.length ? (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Melhorias: {revisao.melhorias.join('; ')}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {documento.conteudo ? (
@@ -1237,6 +1396,7 @@ function ArquivosTab({
 }) {
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
+  const [isIngestaoOpen, setIsIngestaoOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -1298,13 +1458,22 @@ function ArquivosTab({
             Registre evidências e documentos vinculados ao projeto.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsOpen(true)}
-          className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-        >
-          Upload
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setIsIngestaoOpen(true)}
+            className="rounded-md bg-blue-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-800"
+          >
+            Importar documentos
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsOpen(true)}
+            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+          >
+            Upload
+          </button>
+        </div>
       </div>
 
       {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
@@ -1372,6 +1541,38 @@ function ArquivosTab({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isIngestaoOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-8">
+          <div className="w-full max-w-5xl rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-semibold text-slate-950">
+                  Importar documentos
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Envie todos os documentos disponíveis para análise automática e atualização do contexto.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsIngestaoOpen(false)}
+                className="rounded-md px-2 py-1 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+                Fechar
+              </button>
+            </div>
+            <ZonaIngestao
+              projetoId={projetoId}
+              onClose={() => setIsIngestaoOpen(false)}
+              onApplied={() => {
+                setIsIngestaoOpen(false)
+                router.refresh()
+              }}
+            />
           </div>
         </div>
       ) : null}
@@ -1462,10 +1663,55 @@ function ArquivoCard({
               </div>
             </div>
           ) : null}
+          {analise.dados_especificos || analise.informacoes_relevantes?.length ? (
+            <details className="mt-4 rounded-md border border-slate-200 bg-white p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-950">
+                Contexto extraído
+              </summary>
+              {analise.informacoes_relevantes?.length ? (
+                <div className="mt-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Informações relevantes
+                  </h4>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                    {analise.informacoes_relevantes.map((info) => (
+                      <li key={info}>{info}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {analise.dados_especificos ? (
+                <dl className="mt-3 grid gap-3 md:grid-cols-2">
+                  {Object.entries(analise.dados_especificos).map(([key, value]) => (
+                    <div key={key} className="rounded-md bg-slate-50 p-3">
+                      <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        {key.replaceAll('_', ' ')}
+                      </dt>
+                      <dd className="mt-1 text-sm text-slate-700">
+                        {formatExtractedValue(value)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+            </details>
+          ) : null}
         </div>
       ) : null}
     </article>
   )
+}
+
+function formatExtractedValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.length ? value.join(', ') : 'Não identificado'
+  }
+
+  if (value && typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+
+  return value ? String(value) : 'Não identificado'
 }
 
 function renderFileIcon(arquivo: ArquivoData) {

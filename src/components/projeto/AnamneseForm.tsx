@@ -10,6 +10,15 @@ type DadosSetor = {
   produtosQuimicos?: string | null
   residuosPerigosos?: string | null
   observacoesGerais?: string | null
+  documentosExistentes?: Record<string, DocumentoExistente>
+}
+
+type DocumentoExistente = {
+  possui?: boolean
+  dataUltimaRevisao?: string | null
+  responsavelTecnico?: string | null
+  observacoes?: string | null
+  arquivoUrl?: string | null
 }
 
 type PerfilOperacional = {
@@ -30,6 +39,17 @@ export type AnamneseData = {
   dadosSetor: DadosSetor | null
   perfilOperacional: PerfilOperacional | null
 }
+
+const documentosChave = [
+  { key: 'pgr', nome: 'PGR' },
+  { key: 'pcmso', nome: 'PCMSO' },
+  { key: 'licencaAmbiental', nome: 'Licença Ambiental' },
+  { key: 'avcbClcb', nome: 'AVCB/CLCB' },
+  { key: 'alvaraFuncionamento', nome: 'Alvará de Funcionamento' },
+  { key: 'planoEmergencia', nome: 'Plano de Emergência' },
+  { key: 'inventarioProdutosQuimicos', nome: 'Inventário de Produtos Químicos' },
+  { key: 'matrizTreinamentos', nome: 'Matriz de Treinamentos' },
+]
 
 export function AnamneseForm({
   projetoId,
@@ -53,9 +73,26 @@ export function AnamneseForm({
     setIsSubmitting(true)
 
     const formData = new FormData(event.currentTarget)
+    const documentosExistentes = Object.fromEntries(
+      documentosChave.map((documento) => [
+        documento.key,
+        {
+          possui: formData.get(`${documento.key}_possui`) === 'on',
+          dataUltimaRevisao:
+            formData.get(`${documento.key}_dataUltimaRevisao`)?.toString() || null,
+          responsavelTecnico:
+            formData.get(`${documento.key}_responsavelTecnico`)?.toString() || null,
+          observacoes:
+            formData.get(`${documento.key}_observacoes`)?.toString() || null,
+          arquivoUrl:
+            formData.get(`${documento.key}_arquivoUrl`)?.toString() || null,
+        },
+      ]),
+    )
     const payload = {
       ...Object.fromEntries(formData.entries()),
       projetoId,
+      documentosExistentes,
     }
 
     const response = await fetch('/api/anamnese', {
@@ -168,6 +205,63 @@ export function AnamneseForm({
             defaultValue={dados?.observacoesGerais ?? ''}
           />
         </div>
+
+        <section className="mt-8 border-t border-slate-200 pt-6">
+          <div className="mb-5">
+            <h3 className="text-lg font-semibold text-slate-950">Documentos existentes</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Informe quais documentos a empresa já possui. Esses dados alimentam o contexto dos agentes.
+            </p>
+          </div>
+
+          <div className="grid gap-4">
+            {documentosChave.map((documento) => {
+              const docData = dados?.documentosExistentes?.[documento.key]
+
+              return (
+                <div key={documento.key} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <label className="flex items-center gap-3 text-sm font-semibold text-slate-950">
+                    <input
+                      type="checkbox"
+                      name={`${documento.key}_possui`}
+                      defaultChecked={!!docData?.possui}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-950"
+                    />
+                    Possui {documento.nome}?
+                  </label>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                    <Field
+                      id={`${documento.key}_dataUltimaRevisao`}
+                      label="Data da última revisão"
+                      type="date"
+                      defaultValue={docData?.dataUltimaRevisao ?? ''}
+                    />
+                    <Field
+                      id={`${documento.key}_responsavelTecnico`}
+                      label="Responsável técnico"
+                      defaultValue={docData?.responsavelTecnico ?? ''}
+                    />
+                    <Field
+                      id={`${documento.key}_arquivoUrl`}
+                      label="Arquivo anexado (URL)"
+                      defaultValue={docData?.arquivoUrl ?? ''}
+                    />
+                  </div>
+
+                  <div className="mt-4">
+                    <Textarea
+                      id={`${documento.key}_observacoes`}
+                      label="Observações relevantes"
+                      rows={2}
+                      defaultValue={docData?.observacoes ?? ''}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
 
         {message ? <p className="mt-4 text-sm text-emerald-700">{message}</p> : null}
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
@@ -326,10 +420,12 @@ function Textarea({
   id,
   label,
   defaultValue,
+  rows = 4,
 }: {
   id: string
   label: string
   defaultValue: string
+  rows?: number
 }) {
   return (
     <div>
@@ -339,7 +435,7 @@ function Textarea({
       <textarea
         id={id}
         name={id}
-        rows={4}
+        rows={rows}
         defaultValue={defaultValue}
         className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
       />

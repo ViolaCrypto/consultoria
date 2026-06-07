@@ -152,6 +152,12 @@ export default async function ProjetoDetalhePage({
       tipo: documento.tipo,
       status: documento.status,
       conteudo: documento.conteudo,
+      metadados:
+        documento.metadados &&
+        typeof documento.metadados === 'object' &&
+        !Array.isArray(documento.metadados)
+          ? documento.metadados
+          : null,
       updatedAt: documento.updatedAt.toISOString(),
     })),
     modelosDisponiveis: modelosDisponiveis.map((modelo) => ({
