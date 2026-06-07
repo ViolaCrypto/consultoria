@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       {
         nome: docProjeto.projeto.empresa.nome,
         setor: docProjeto.projeto.empresa.setor,
+        setorCodigo: docProjeto.projeto.empresa.setorCodigo,
         cnae: docProjeto.projeto.empresa.cnae,
         cidade: docProjeto.projeto.empresa.cidade,
         estado: docProjeto.projeto.empresa.estado,

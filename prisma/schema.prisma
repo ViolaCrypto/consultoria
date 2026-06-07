@@ -15,10 +15,97 @@ model Empresa {
   cnpj      String?
   cnae      String?
   setor     String?   // metalurgia, quimico, plastico, logistica...
+  setorCodigo String?
+  setorId   String?
+  setorIndustrial SetorIndustrial? @relation(fields: [setorId], references: [id], onDelete: SetNull)
   cidade    String?
   estado    String?
   createdAt DateTime  @default(now())
   projetos  Projeto[]
+}
+
+model SetorIndustrial {
+  id          String              @id @default(cuid())
+  nome        String
+  codigo      String              @unique
+  descricao   String?
+  cnaes       String[]
+  processos   ProcessoTipico[]
+  empresas    Empresa[]
+}
+
+model ProcessoTipico {
+  id                  String             @id @default(cuid())
+  nome                String
+  descricao           String?
+  setorId             String
+  setor               SetorIndustrial    @relation(fields: [setorId], references: [id])
+  riscosSST           RiscoSST[]
+  aspectosAmbientais  AspectoAmbiental[]
+}
+
+model RiscoSST {
+  id             String          @id @default(cuid())
+  nome           String
+  tipo           String
+  nrsAplicaveis  String[]
+  processoId     String
+  processo       ProcessoTipico @relation(fields: [processoId], references: [id])
+}
+
+model AspectoAmbiental {
+  id          String          @id @default(cuid())
+  nome        String
+  tipo        String
+  impacto     String?
+  processoId  String
+  processo    ProcessoTipico @relation(fields: [processoId], references: [id])
+}
+
+model RequisitoLegal {
+  id           String   @id @default(cuid())
+  codigo       String
+  nome         String
+  descricao    String?
+  tipo         String
+  orgao        String
+  setores      String[]
+  obrigatorio  Boolean  @default(true)
+}
+
+model DocumentoObrigatorio {
+  id             String   @id @default(cuid())
+  nome           String
+  tipo           String
+  setores        String[]
+  nrBase         String?
+  periodicidade  String?
+  observacoes    String?
+}
+
+model MemoriaConsultoria {
+  id          String   @id @default(cuid())
+  tipo        String   // documento_aprovado / gap_padrao / licao_aprendida / padrao_setor
+  setor       String
+  conteudo    String   @db.Text
+  metadados   Json?
+  embedding   Unsupported("vector(1536)")?
+  aprovadoEm  DateTime?
+  projetoId   String?
+  createdAt   DateTime @default(now())
+}
+
+model PadraoDocumento {
+  id                  String   @id @default(cuid())
+  nome                String
+  tipo                String
+  setor               String
+  conteudo            String   @db.Text
+  aprovadoEmAuditoria Boolean  @default(false)
+  vezes_usado         Int      @default(0)
+  score_medio         Float?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 model Projeto {
@@ -41,6 +128,7 @@ model Arquivo {
   url       String
   tipo      String   // pdf, xlsx, imagem, docx...
   tamanho   Int?
+  metadados Json?
   projetoId String
   projeto   Projeto  @relation(fields: [projetoId], references: [id])
   createdAt DateTime @default(now())

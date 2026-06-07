@@ -6,8 +6,10 @@ import { usePathname } from 'next/navigation'
 import {
   BookOpen,
   Building2,
+  Brain,
   ChevronRight,
   ClipboardCheck,
+  Database,
   Factory,
 } from 'lucide-react'
 
@@ -15,13 +17,15 @@ type DashboardLink = {
   href: string
   label: string
   count?: number
-  icon: 'empresas' | 'modelos' | 'biblioteca'
+  icon: 'empresas' | 'modelos' | 'biblioteca' | 'ontologia' | 'memoria'
 }
 
 const icons = {
   empresas: Building2,
   modelos: ClipboardCheck,
   biblioteca: BookOpen,
+  ontologia: Database,
+  memoria: Brain,
 }
 
 export function DashboardShell({
@@ -224,6 +228,16 @@ function buildBreadcrumbs(pathname: string, dynamicLabels: Record<string, string
 
     if (part === 'modelos') {
       labels.push('Modelos de Avaliação')
+      continue
+    }
+
+    if (part === 'ontologia') {
+      labels.push('Ontologia')
+      continue
+    }
+
+    if (part === 'memoria') {
+      labels.push('Memória')
       continue
     }
 

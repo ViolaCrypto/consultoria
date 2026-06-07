@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { salvarDocumentoAprovado } from '@/lib/memoria'
 import { prisma } from '@/lib/prisma'
 
 const documentoUpdateSchema = z.object({
@@ -54,7 +55,33 @@ export async function PUT(
         ...(data.conteudo !== undefined ? { conteudo: data.conteudo } : {}),
         aprovadoPor: data.status === 'aprovado' ? 'humano' : undefined,
       },
+      include: {
+        projeto: {
+          include: {
+            empresa: true,
+          },
+        },
+      },
     })
+
+    if (data.status === 'aprovado') {
+      await salvarDocumentoAprovado(
+        {
+          id: documento.id,
+          nome: documento.nome,
+          tipo: documento.tipo,
+          conteudo: documento.conteudo,
+          projetoId: documento.projetoId,
+        },
+        {
+          id: documento.projeto.empresa.id,
+          nome: documento.projeto.empresa.nome,
+          setor: documento.projeto.empresa.setor,
+          setorCodigo: documento.projeto.empresa.setorCodigo,
+        },
+        documento.projeto.empresa.setorCodigo || documento.projeto.empresa.setor,
+      )
+    }
 
     return NextResponse.json(documento)
   } catch (error) {

@@ -56,6 +56,7 @@ export async function POST(request: Request) {
       {
         nome: projeto.empresa.nome,
         setor: projeto.empresa.setor,
+        setorCodigo: projeto.empresa.setorCodigo,
         cnae: projeto.empresa.cnae,
       },
     )

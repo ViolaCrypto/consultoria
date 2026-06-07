@@ -76,6 +76,12 @@ export default async function ProjetoDetalhePage({
       url: arquivo.url,
       tipo: arquivo.tipo,
       tamanho: arquivo.tamanho,
+      metadados:
+        arquivo.metadados &&
+        typeof arquivo.metadados === 'object' &&
+        !Array.isArray(arquivo.metadados)
+          ? arquivo.metadados
+          : null,
       createdAt: arquivo.createdAt.toISOString(),
     })),
     anamnese: projeto.anamnese

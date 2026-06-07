@@ -1,4 +1,5 @@
 import { openai } from '@/lib/openai'
+import { buscarPadroesSetor, normalizarSetor } from '@/lib/memoria'
 
 type DocProjetoInput = {
   nome: string
@@ -14,6 +15,7 @@ type DocProjetoInput = {
 type EmpresaInput = {
   nome: string
   setor: string | null
+  setorCodigo?: string | null
   cnae: string | null
   cidade?: string | null
   estado?: string | null
@@ -37,6 +39,7 @@ function baseContext(
     `Tipo interno: ${docProjeto.tipo}`,
     `Empresa: ${empresa.nome}`,
     `Setor: ${empresa.setor || 'não informado'}`,
+    `Setor na ontologia: ${empresa.setorCodigo || 'não informado'}`,
     `CNAE: ${empresa.cnae || 'não informado'}`,
     `Localização: ${[empresa.cidade, empresa.estado].filter(Boolean).join(', ') || 'não informada'}`,
     `Número de funcionários: ${anamnese?.numFuncionarios ?? 'não informado'}`,
@@ -97,9 +100,28 @@ export async function gerarDocumento(
   perfilOperacional: unknown,
 ) {
   const prompt = promptForDocument(docProjeto.nome)
+  const setorReferencia = normalizarSetor(empresa.setorCodigo || empresa.setor)
+  const padroesSetor = await buscarPadroesSetor(
+    setorReferencia,
+    docProjeto.tipo || docProjeto.nome,
+  )
   const gaps = docProjeto.gaps?.length
     ? `\nGaps do projeto:\n${JSON.stringify(docProjeto.gaps)}`
     : '\nGaps do projeto: nenhum gap informado.'
+  const referencias = padroesSetor.length
+    ? [
+        'Exemplos de referência aprovados pela consultoria:',
+        ...padroesSetor.map((padrao, index) =>
+          [
+            `Exemplo ${index + 1}: ${padrao.nome}`,
+            `Setor: ${padrao.setor}`,
+            `Tipo: ${padrao.tipo}`,
+            'Conteúdo aprovado:',
+            padrao.conteudo.slice(0, 4000),
+          ].join('\n'),
+        ),
+      ].join('\n\n')
+    : 'Nenhum documento aprovado anterior encontrado para este setor/tipo.'
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
@@ -113,7 +135,10 @@ export async function gerarDocumento(
         role: 'user',
         content: [
           prompt.userInstruction,
+          'Use esses documentos aprovados como referência de qualidade e especificidade quando existirem.',
           'Retorne somente o conteúdo do documento em Markdown estruturado.',
+          '',
+          referencias,
           '',
           baseContext(docProjeto, empresa, anamnese, perfilOperacional),
           gaps,

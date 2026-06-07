@@ -3,8 +3,22 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
+import { FileImage, FileText, FileType } from 'lucide-react'
 import { AnamneseForm, type AnamneseData } from '@/components/projeto/AnamneseForm'
 import { exportarPDF, exportarWord } from '@/lib/exportar'
+
+type ArquivoAnalise = {
+  tipoDetectado?: string
+  analise?: {
+    tipo_confirmado?: string
+    validade?: string | null
+    orgao_emissor?: string | null
+    numero_documento?: string | null
+    resumo?: string
+    informacoes_relevantes?: string[]
+    requisitos_atendidos?: string[]
+  }
+}
 
 type ArquivoData = {
   id: string
@@ -12,6 +26,7 @@ type ArquivoData = {
   url: string
   tipo: string
   tamanho: number | null
+  metadados: ArquivoAnalise | null
   createdAt: string
 }
 
@@ -1027,6 +1042,7 @@ function ArquivosTab({
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [processingId, setProcessingId] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1057,6 +1073,26 @@ function ArquivosTab({
     router.refresh()
   }
 
+  async function processArquivo(arquivoId: string) {
+    setError('')
+    setProcessingId(arquivoId)
+
+    const response = await fetch('/api/arquivos/processar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ arquivoId }),
+    })
+
+    setProcessingId(null)
+
+    if (!response.ok) {
+      setError('Não foi possível analisar o arquivo com IA.')
+      return
+    }
+
+    router.refresh()
+  }
+
   return (
     <section>
       <div className="mb-4 flex items-center justify-between gap-4">
@@ -1075,37 +1111,18 @@ function ArquivosTab({
         </button>
       </div>
 
+      {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+
       {arquivos.length > 0 ? (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Nome</th>
-                <th className="px-4 py-3">Tipo</th>
-                <th className="px-4 py-3">Data</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {arquivos.map((arquivo) => (
-                <tr key={arquivo.id}>
-                  <td className="px-4 py-3">
-                    <a
-                      href={arquivo.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-medium text-slate-950 hover:underline"
-                    >
-                      {arquivo.nome}
-                    </a>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{arquivo.tipo}</td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {new Date(arquivo.createdAt).toLocaleDateString('pt-BR')}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid gap-4">
+          {arquivos.map((arquivo) => (
+            <ArquivoCard
+              key={arquivo.id}
+              arquivo={arquivo}
+              isProcessing={processingId === arquivo.id}
+              onProcess={() => processArquivo(arquivo.id)}
+            />
+          ))}
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">
@@ -1166,6 +1183,138 @@ function ArquivosTab({
   )
 }
 
+function ArquivoCard({
+  arquivo,
+  isProcessing,
+  onProcess,
+}: {
+  arquivo: ArquivoData
+  isProcessing: boolean
+  onProcess: () => void
+}) {
+  const analise = arquivo.metadados?.analise
+  const tipoDetectado = analise?.tipo_confirmado || arquivo.metadados?.tipoDetectado
+  const validity = getValidityStatus(analise?.validade || null)
+
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
+            {renderFileIcon(arquivo)}
+          </div>
+          <div>
+            <a
+              href={arquivo.url}
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-slate-950 hover:underline"
+            >
+              {arquivo.nome}
+            </a>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge tone="slate">{arquivo.tipo}</Badge>
+              {tipoDetectado ? <Badge tone="blue">{tipoDetectado}</Badge> : null}
+              {validity ? <Badge tone={validity.tone}>{validity.label}</Badge> : null}
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Enviado em {new Date(arquivo.createdAt).toLocaleDateString('pt-BR')}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onProcess}
+          disabled={isProcessing}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isProcessing ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-950" />
+              Analisando...
+            </span>
+          ) : analise ? (
+            'Reanalisar com IA'
+          ) : (
+            'Analisar com IA'
+          )}
+        </button>
+      </div>
+
+      {analise ? (
+        <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <SmallInfo label="Validade" value={analise.validade || 'Não identificada'} />
+            <SmallInfo label="Órgão emissor" value={analise.orgao_emissor || 'Não identificado'} />
+            <SmallInfo label="Número" value={analise.numero_documento || 'Não identificado'} />
+          </div>
+          {analise.resumo ? (
+            <p className="mt-4 text-sm text-slate-700">{analise.resumo}</p>
+          ) : null}
+          {analise.requisitos_atendidos?.length ? (
+            <div className="mt-4">
+              <h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Requisitos que comprova
+              </h4>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {analise.requisitos_atendidos.map((requisito) => (
+                  <Badge key={requisito} tone="green">
+                    {requisito}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+function renderFileIcon(arquivo: ArquivoData) {
+  const value = `${arquivo.nome} ${arquivo.tipo}`.toLowerCase()
+
+  if (value.includes('pdf')) {
+    return <FileText className="h-5 w-5" />
+  }
+
+  if (value.includes('doc') || value.includes('word')) {
+    return <FileType className="h-5 w-5" />
+  }
+
+  if (value.includes('png') || value.includes('jpg') || value.includes('jpeg') || value.includes('imagem')) {
+    return <FileImage className="h-5 w-5" />
+  }
+
+  return <FileText className="h-5 w-5" />
+}
+
+function getValidityStatus(validade: string | null): { label: string; tone: 'amber' | 'red' } | null {
+  if (!validade) {
+    return null
+  }
+
+  const date = new Date(validade)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const now = new Date()
+  const days = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (days < 0) {
+    return { label: 'Vencido', tone: 'red' }
+  }
+
+  if (days <= 30) {
+    return { label: 'Vence em breve', tone: 'amber' }
+  }
+
+  return null
+}
+
 function Progress({ value }: { value: number }) {
   return (
     <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -1214,13 +1363,14 @@ function Badge({
   tone,
 }: {
   children: React.ReactNode
-  tone: 'blue' | 'amber' | 'green' | 'slate'
+  tone: 'blue' | 'amber' | 'green' | 'slate' | 'red'
 }) {
   const classes = {
     blue: 'bg-blue-50 text-blue-700',
     amber: 'bg-amber-50 text-amber-700',
     green: 'bg-emerald-50 text-emerald-700',
     slate: 'bg-slate-100 text-slate-700',
+    red: 'bg-red-50 text-red-700',
   }
 
   return (
