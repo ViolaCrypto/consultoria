@@ -8,7 +8,7 @@ export async function gerarDiagnosticoInicial(
   gapAnalysis: unknown,
 ) {
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     max_tokens: 4000,
     messages: [
       {

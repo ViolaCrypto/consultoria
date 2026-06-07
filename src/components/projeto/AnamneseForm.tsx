@@ -80,16 +80,20 @@ export function AnamneseForm({
     setError('')
     setIsGeneratingProfile(true)
 
+    console.log('projetoId no AnamneseForm:', projetoId)
+
     const response = await fetch('/api/agentes/perfil-operacional', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projetoId }),
+      body: JSON.stringify({ projetoId: projetoId }),
     })
 
     setIsGeneratingProfile(false)
 
     if (!response.ok) {
-      setError('Não foi possível gerar o perfil operacional. Verifique a anamnese e a chave da OpenAI.')
+      const payload = await response.json().catch(() => null)
+      console.error('Erro ao gerar perfil operacional:', payload)
+      setError(payload?.error || 'Não foi possível gerar o perfil operacional.')
       return
     }
 

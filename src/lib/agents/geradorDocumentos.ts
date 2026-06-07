@@ -124,7 +124,7 @@ export async function gerarDocumento(
     : 'Nenhum documento aprovado anterior encontrado para este setor/tipo.'
 
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     max_tokens: 3000,
     messages: [
       {

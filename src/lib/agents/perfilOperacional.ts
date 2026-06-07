@@ -42,7 +42,7 @@ export async function gerarPerfilOperacional(
   const setorOntologia = await buscarOntologiaSetor(codigoSetor, empresa.cnae)
 
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: 'gpt-4o-mini',
     response_format: { type: 'json_object' },
     messages: [
       {
