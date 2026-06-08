@@ -1,10 +1,15 @@
 import { z } from 'zod'
 import { openai } from '@/lib/openai'
 
+const itemTextoSchema = z.union([
+  z.string(),
+  z.object({}).passthrough().transform((obj) => JSON.stringify(obj)),
+])
+
 const avaliacaoSchema = z.object({
   score: z.number().min(0).max(100),
-  problemas: z.array(z.string()),
-  melhorias: z.array(z.string()),
+  problemas: z.array(itemTextoSchema).default([]),
+  melhorias: z.array(itemTextoSchema).default([]),
 })
 
 export type ResultadoAutoRevisao = {

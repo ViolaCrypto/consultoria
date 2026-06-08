@@ -48,6 +48,24 @@ export async function PUT(
     const body = await request.json().catch(() => null)
     const data = documentoUpdateSchema.parse(body)
 
+    if (data.status === 'aprovado') {
+      const atual = await prisma.docProjeto.findUnique({
+        where: { id },
+        select: { metadados: true },
+      })
+      const validacao = getValidacaoAuditoria(atual?.metadados)
+
+      if (validacao?.temProblemasCriticos) {
+        return NextResponse.json(
+          {
+            error: 'Documento possui problemas criticos de auditoria e nao pode ser aprovado.',
+            validacaoAuditoria: validacao,
+          },
+          { status: 400 },
+        )
+      }
+    }
+
     const documento = await prisma.docProjeto.update({
       where: { id },
       data: {
@@ -98,4 +116,17 @@ export async function PUT(
       { status: 500 },
     )
   }
+}
+
+function getValidacaoAuditoria(metadados: unknown) {
+  if (!metadados || typeof metadados !== 'object') {
+    return null
+  }
+
+  const validacao = (metadados as { validacaoAuditoria?: unknown }).validacaoAuditoria
+  if (!validacao || typeof validacao !== 'object') {
+    return null
+  }
+
+  return validacao as { temProblemasCriticos?: boolean }
 }

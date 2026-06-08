@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import ReactMarkdown from 'react-markdown'
 import { Sparkles, UploadCloud } from 'lucide-react'
 import { exportarPDF, exportarWord, type DocumentoExport } from '@/lib/exportar'
+import { PreviewDocumento } from '@/components/projeto/PreviewDocumento'
 
 type DocumentoHub = {
   id: string
@@ -20,6 +20,7 @@ type DocumentoHub = {
   urlExportado: string | null
   createdAt: string
   updatedAt: string
+  metadados: unknown | null
   exportacoes: {
     id: string
     formato: string
@@ -93,43 +94,60 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
 
   async function createAndGenerate(recomendacao: Recomendacao) {
     setBusyId(recomendacao.nome)
-    const create = await fetch('/api/documentos', {
+    setMessage('Gerando documento com IA... isso pode levar 30-60 segundos.')
+    const response = await fetch('/api/agentes/gerar-documento', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         projetoId: projeto.id,
-        nome: recomendacao.nome,
-        tipo: recomendacao.tipo,
-        status: recomendacao.tipo === 'exigivel_cliente' ? 'aguardando_cliente' : 'pendente',
-        requisitosOrigem: recomendacao.requisitosOrigem,
+        nomeDocumento: recomendacao.nome,
+        tipoDocumento: recomendacao.tipo,
+        requisitosOrigem: recomendacao.requisitosOrigem || [],
       }),
     })
 
-    if (create.ok && recomendacao.tipo !== 'exigivel_cliente') {
-      const documento = (await create.json()) as DocumentoHub
-      await generate(documento.id, false)
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      console.error('Erro completo:', data)
+      alert(`Erro: ${data?.error || data?.message || JSON.stringify(data).substring(0, 200)}`)
+      setMessage('')
+      setBusyId(null)
+      return
     }
 
+    setMessage('Documento gerado com sucesso.')
     setBusyId(null)
     router.refresh()
   }
 
   async function generate(documentoId: string, refresh = true) {
     setBusyId(documentoId)
-    await fetch('/api/agentes/gerar-documento', {
+    setMessage('Gerando documento com IA... isso pode levar 30-60 segundos.')
+    const response = await fetch('/api/agentes/gerar-documento', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ docProjetoId: documentoId }),
     })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      console.error('Erro completo:', data)
+      alert(`Erro: ${data?.error || data?.message || JSON.stringify(data).substring(0, 200)}`)
+      setMessage('')
+      setBusyId(null)
+      return
+    }
+    setMessage('Documento gerado com sucesso.')
     setBusyId(null)
     if (refresh) router.refresh()
   }
 
   async function generateAll() {
     setBusyId('gerar-todos')
+    setMessage('Gerando documentos com IA em lote... isso pode levar alguns minutos.')
     for (const documento of geraveisPendentes) {
       await generate(documento.id, false)
     }
+    setMessage('GeraÃ§Ã£o em lote concluÃ­da.')
     setBusyId(null)
     router.refresh()
   }
@@ -157,6 +175,28 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
       setReviews((current) => ({ ...current, [documentoId]: data }))
     }
     setBusyId(null)
+  }
+
+  async function regenerateFixing(documentoId: string, problemas: unknown[]) {
+    setBusyId(`regen-${documentoId}`)
+    setMessage('Regenerando documento corrigindo problemas de auditoria...')
+    const response = await fetch('/api/agentes/regenerar-corrigindo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ docProjetoId: documentoId, problemas }),
+    })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      console.error('Erro completo:', data)
+      alert(`Erro: ${data?.error || data?.message || JSON.stringify(data).substring(0, 200)}`)
+      setMessage('')
+      setBusyId(null)
+      return
+    }
+    setMessage('Documento regenerado com correcoes.')
+    setBusyId(null)
+    setPreview(null)
+    router.refresh()
   }
 
   async function markClientReceived(documento: DocumentoHub, file?: File | null) {
@@ -222,7 +262,7 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
               onClick={() => createAndGenerate(recomendacao)}
               className="mt-4 rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
-              Criar e gerar com IA
+              {busyId === recomendacao.nome ? <LoadingLabel label="Gerando..." /> : 'Criar e gerar com IA'}
             </button>
           </Card>
         ))}
@@ -233,7 +273,9 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
           <Card key={documento.id}>
             <CardHeader title={documento.nome} subtitle={originText(documento)} badge={documento.tipo} />
             <div className="mt-4 flex flex-wrap gap-2">
-              <Action onClick={() => generate(documento.id)} disabled={busyId === documento.id}>Gerar com IA</Action>
+              <Action onClick={() => generate(documento.id)} disabled={busyId === documento.id}>
+                {busyId === documento.id ? <LoadingLabel label="Gerando..." /> : 'Gerar com IA'}
+              </Action>
               <Action variant="secondary" onClick={() => updateStatus(documento.id, 'aguardando_cliente')}>Marcar como exigível do cliente</Action>
             </div>
           </Card>
@@ -300,7 +342,13 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
       </DocumentSection>
 
       {preview ? (
-        <FullPreview documento={preview} empresa={projeto.empresa} onClose={() => setPreview(null)} />
+        <FullPreview
+          documento={preview}
+          empresa={projeto.empresa}
+          regenerando={busyId === `regen-${preview.id}`}
+          onRegenerarCorrigindo={(problemas) => regenerateFixing(preview.id, problemas)}
+          onClose={() => setPreview(null)}
+        />
       ) : null}
     </section>
   )
@@ -366,6 +414,7 @@ function documentosTipicosPorSetor(setor: string) {
 
 function inferTipo(nome: string) {
   const n = normalize(nome)
+  if (n.includes('pgrs')) return 'geravel_ia'
   if (['pgr', 'pcmso', 'avcb', 'alvara', 'licenca'].some((term) => n.includes(term))) return 'exigivel_cliente'
   if (n.includes('plano') || n.includes('politica') || n.includes('matriz') || n.includes('procedimento')) return 'geravel_ia'
   return 'semi_geravel'
@@ -450,6 +499,15 @@ function Action({
   )
 }
 
+function LoadingLabel({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+      {label}
+    </span>
+  )
+}
+
 function ReviewSummary({ review }: { review: Revisao }) {
   return (
     <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
@@ -458,7 +516,19 @@ function ReviewSummary({ review }: { review: Revisao }) {
   )
 }
 
-function FullPreview({ documento, empresa, onClose }: { documento: DocumentoHub; empresa: { nome: string }; onClose: () => void }) {
+function FullPreview({
+  documento,
+  empresa,
+  regenerando,
+  onRegenerarCorrigindo,
+  onClose,
+}: {
+  documento: DocumentoHub
+  empresa: { nome: string }
+  regenerando?: boolean
+  onRegenerarCorrigindo: (problemas: unknown[]) => void
+  onClose: () => void
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 py-6">
       <div className="flex h-full w-full max-w-5xl flex-col rounded-lg bg-white shadow-xl">
@@ -471,9 +541,11 @@ function FullPreview({ documento, empresa, onClose }: { documento: DocumentoHub;
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-6">
-          <div className="prose prose-sm max-w-none break-words prose-slate">
-            <ReactMarkdown>{documento.conteudo || 'Sem conteúdo.'}</ReactMarkdown>
-          </div>
+          <PreviewDocumento
+            documento={documento}
+            regenerando={regenerando}
+            onRegenerarCorrigindo={(problemas) => onRegenerarCorrigindo(problemas)}
+          />
           {documento.exportacoes.length > 0 ? (
             <div className="mt-6 rounded-md bg-slate-50 p-4">
               <h4 className="font-semibold text-slate-950">Histórico de versões</h4>

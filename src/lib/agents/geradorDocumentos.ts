@@ -2,8 +2,11 @@ import { executarComRaciocinio } from '@/lib/agents/base/agenteCOT'
 import { gerarComAutoRevisao } from '@/lib/agents/base/agenteAutoRevisor'
 import { gerarInventarioRiscos } from '@/lib/agents/documentos/inventarioRiscos'
 import { gerarMatrizAspectosImpactos } from '@/lib/agents/documentos/matrizAspectosImpactos'
+import { gerarPCMSO } from '@/lib/agents/documentos/pcmso'
+import { gerarPGR } from '@/lib/agents/documentos/pgr'
 import { gerarPGRS } from '@/lib/agents/documentos/pgrs'
 import { gerarPlanoEmergencia } from '@/lib/agents/documentos/planoEmergencia'
+import { gerarPoliticaAmbiental } from '@/lib/agents/documentos/politicaAmbiental'
 import { CONSULTORIA_CONFIG } from '@/lib/config/consultoria'
 import { montarContextoCompleto } from '@/lib/contextoDocumental'
 import { buscarPadroesSetor, normalizarSetor } from '@/lib/memoria'
@@ -144,6 +147,25 @@ function promptForDocument(name: string) {
 function detectarDocumentoEspecializado(nome: string) {
   const normalized = nome.toLowerCase()
 
+  if (normalized.includes('pcmso')) {
+    return 'pcmso'
+  }
+
+  if (
+    normalized.includes('politica ambiental') ||
+    normalized.includes('polÃ­tica ambiental')
+  ) {
+    return 'politicaAmbiental'
+  }
+
+  if (
+    normalized === 'pgr' ||
+    normalized.includes('programa de gerenciamento de riscos') ||
+    (normalized.includes('pgr') && !normalized.includes('pgrs'))
+  ) {
+    return 'pgr'
+  }
+
   if (
     normalized.includes('matriz de aspectos') ||
     normalized.includes('aspectos e impactos') ||
@@ -262,6 +284,43 @@ export async function gerarDocumento(
   ].join('\n')
   const agenteEspecializado = detectarDocumentoEspecializado(docProjeto.nome)
 
+  if (agenteEspecializado === 'pgr') {
+    const gerado = await gerarPGR({
+      empresa,
+      perfilOperacional,
+      setoresIdentificados: anamnese?.dadosSetor || {},
+      arquivosAnalisados: contextoDocumental?.arquivosProcessados || [],
+      ontologiaSetor: contextoDocumental?.ontologia || {},
+      contextoCompleto,
+      docProjetoId: docProjeto.id,
+    })
+    return { ...gerado, metadados: { ...gerado.metadados, geradoEm: new Date().toISOString() } }
+  }
+
+  if (agenteEspecializado === 'pcmso') {
+    const gerado = await gerarPCMSO({
+      empresa,
+      perfilOperacional,
+      arquivosAnalisados: contextoDocumental?.arquivosProcessados || [],
+      ontologiaSetor: contextoDocumental?.ontologia || {},
+      contextoCompleto,
+      docProjetoId: docProjeto.id,
+    })
+    return { ...gerado, metadados: { ...gerado.metadados, geradoEm: new Date().toISOString() } }
+  }
+
+  if (agenteEspecializado === 'politicaAmbiental') {
+    const gerado = await gerarPoliticaAmbiental({
+      empresa,
+      perfilOperacional,
+      arquivosAnalisados: contextoDocumental?.arquivosProcessados || [],
+      ontologiaSetor: contextoDocumental?.ontologia || {},
+      contextoCompleto,
+      docProjetoId: docProjeto.id,
+    })
+    return { ...gerado, metadados: { ...gerado.metadados, geradoEm: new Date().toISOString() } }
+  }
+
   if (agenteEspecializado === 'matrizAspectosImpactos') {
     const gerado = await gerarMatrizAspectosImpactos(contextoCompleto, docProjeto.id)
     return { ...gerado, metadados: { ...gerado.metadados, geradoEm: new Date().toISOString() } }
@@ -315,25 +374,44 @@ export async function gerarDocumento(
     contextoCompleto,
     gaps,
   ].join('\n')
-  const { raciocinio } = await executarComRaciocinio(
+  const { resultado, raciocinio } = await executarComRaciocinio(
     prompt.system,
     userPrompt,
     undefined,
     { docProjetoId: docProjeto.id, maxTokens: 3500 },
   )
-  const autoRevisao = await gerarComAutoRevisao(
-    userPrompt,
-    contextoCompleto,
-    criteriosPorDocumento(docProjeto.nome),
-  )
 
-  return {
-    conteudo: autoRevisao.documento,
-    metadados: {
-      raciocinioIA: raciocinio,
-      autoRevisao,
-      agente: 'genericoComCOT',
-      geradoEm: new Date().toISOString(),
-    },
+  try {
+    const autoRevisao = await gerarComAutoRevisao(
+      userPrompt,
+      contextoCompleto,
+      criteriosPorDocumento(docProjeto.nome),
+    )
+
+    return {
+      conteudo: autoRevisao.documento,
+      metadados: {
+        raciocinioIA: raciocinio,
+        autoRevisao,
+        agente: 'genericoComCOT',
+        geradoEm: new Date().toISOString(),
+      },
+    }
+  } catch (error) {
+    console.error('Auto-revisÃ£o falhou; salvando documento sem score:', error)
+
+    return {
+      conteudo: String(resultado),
+      metadados: {
+        raciocinioIA: raciocinio,
+        autoRevisao: {
+          erro: error instanceof Error ? error.message : String(error),
+          score: null,
+          revisoes: [],
+        },
+        agente: 'genericoComCOT',
+        geradoEm: new Date().toISOString(),
+      },
+    }
   }
 }
