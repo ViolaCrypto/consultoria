@@ -10,14 +10,15 @@ import {
   ChevronRight,
   ClipboardCheck,
   Database,
-  Factory,
+  Settings,
 } from 'lucide-react'
+import { CONSULTORIA_CONFIG } from '@/lib/config/consultoria'
 
 type DashboardLink = {
   href: string
   label: string
   count?: number
-  icon: 'empresas' | 'modelos' | 'biblioteca' | 'ontologia' | 'memoria'
+  icon: 'empresas' | 'modelos' | 'biblioteca' | 'ontologia' | 'memoria' | 'configuracoes'
 }
 
 const icons = {
@@ -26,18 +27,42 @@ const icons = {
   biblioteca: BookOpen,
   ontologia: Database,
   memoria: Brain,
+  configuracoes: Settings,
+}
+
+type MarcaConfig = {
+  nome?: string | null
+  nomeCompleto?: string | null
+  slogan?: string | null
+  corPrimaria?: string | null
+  corSecundaria?: string | null
+  logoUrl?: string | null
+  versao?: string
+  ano?: string
 }
 
 export function DashboardShell({
   children,
   links,
+  marca,
 }: {
   children: React.ReactNode
   links: DashboardLink[]
+  marca?: MarcaConfig
 }) {
   const pathname = usePathname()
   const [dynamicLabels, setDynamicLabels] = useState<Record<string, string>>({})
   const breadcrumbs = buildBreadcrumbs(pathname, dynamicLabels)
+  const config = {
+    nome: marca?.nome || CONSULTORIA_CONFIG.nome,
+    nomeCompleto: marca?.nomeCompleto || CONSULTORIA_CONFIG.nomeCompleto,
+    slogan: marca?.slogan || CONSULTORIA_CONFIG.slogan,
+    corPrimaria: marca?.corPrimaria || CONSULTORIA_CONFIG.corPrimaria,
+    corSecundaria: marca?.corSecundaria || CONSULTORIA_CONFIG.corSecundaria,
+    logoUrl: marca?.logoUrl || null,
+    versao: marca?.versao || CONSULTORIA_CONFIG.versao,
+    ano: marca?.ano || CONSULTORIA_CONFIG.ano,
+  }
 
   useEffect(() => {
     let active = true
@@ -95,18 +120,26 @@ export function DashboardShell({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
-      <aside className="fixed inset-y-0 left-0 hidden w-72 flex-col bg-[var(--color-sidebar-bg)] px-5 py-6 text-[var(--color-sidebar-text)] lg:flex">
+      <aside className="fixed inset-y-0 left-0 hidden w-72 flex-col bg-[var(--cor-sidebar)] px-5 py-6 text-[var(--cor-sidebar-texto)] lg:flex">
         <div className="flex items-center gap-3 rounded-lg bg-white/10 px-3 py-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-[var(--color-primary)]">
-            <Factory className="h-5 w-5" />
+          <div
+            className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full text-sm font-bold text-white"
+            style={{ backgroundColor: config.corPrimaria }}
+          >
+            {config.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={config.logoUrl} alt={config.nome} className="h-full w-full object-cover" />
+            ) : (
+              getInitials(config.nome)
+            )}
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
-              Consultoria
-            </p>
-            <h1 className="text-base font-semibold">Plataforma SGI</h1>
+            <h1 className="text-base font-semibold">{config.nome}</h1>
+            <p className="mt-0.5 text-xs text-slate-300">{config.slogan}</p>
           </div>
         </div>
+
+        <div className="mt-5 border-t border-white/10" />
 
         <nav className="mt-8 space-y-2">
           {links.map((link) => {
@@ -120,7 +153,7 @@ export function DashboardShell({
                 href={link.href}
                 className={`flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium transition ${
                   active
-                    ? 'bg-[var(--color-primary)] text-white shadow-sm'
+                    ? 'bg-[var(--cor-sidebar-ativo)] text-white shadow-sm'
                     : 'text-slate-200 hover:bg-white/10 hover:text-white'
                 }`}
               >
@@ -142,8 +175,21 @@ export function DashboardShell({
           })}
         </nav>
 
-        <div className="mt-auto border-t border-white/10 pt-4 text-xs text-slate-400">
-          v1.0 — Plataforma Interna
+        <div className="mt-auto space-y-3 border-t border-white/10 pt-4">
+          <Link
+            href="/configuracoes"
+            className={`flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition ${
+              pathname.startsWith('/configuracoes')
+                ? 'bg-[var(--cor-sidebar-ativo)] text-white'
+                : 'text-slate-200 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Settings className="h-4 w-4" />
+            Configurações
+          </Link>
+          <div className="text-xs text-slate-400">
+            {config.versao} — Plataforma Interna · {config.ano}
+          </div>
         </div>
       </aside>
 
@@ -241,6 +287,11 @@ function buildBreadcrumbs(pathname: string, dynamicLabels: Record<string, string
       continue
     }
 
+    if (part === 'configuracoes') {
+      labels.push('Configurações')
+      continue
+    }
+
     if (part === 'entrega') {
       labels.push('Entrega Final')
       continue
@@ -260,6 +311,15 @@ function buildBreadcrumbs(pathname: string, dynamicLabels: Record<string, string
   }
 
   return labels
+}
+
+function getInitials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase())
+    .join('')
 }
 
 function prettifySegment(segment: string) {

@@ -1,4 +1,5 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
+import { CONSULTORIA_CONFIG } from '@/lib/config/consultoria'
 import { prisma } from '@/lib/prisma'
 
 const baseLinks = [
@@ -14,11 +15,12 @@ export default async function DashboardLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const [empresasCount, modelosCount, setoresCount, memoriasCount] = await Promise.all([
+  const [empresasCount, modelosCount, setoresCount, memoriasCount, config] = await Promise.all([
     prisma.empresa.count(),
     prisma.modeloAvaliacao.count(),
     prisma.setorIndustrial.count(),
     prisma.memoriaConsultoria.count(),
+    prisma.configuracaoConsultoria.findFirst({ orderBy: { updatedAt: 'desc' } }),
   ])
 
   const links = [
@@ -49,5 +51,21 @@ export default async function DashboardLayout({
     ...baseLinks,
   ]
 
-  return <DashboardShell links={links}>{children}</DashboardShell>
+  return (
+    <DashboardShell
+      links={links}
+      marca={{
+        nome: config?.nome || CONSULTORIA_CONFIG.nome,
+        nomeCompleto: config?.nomeCompleto || CONSULTORIA_CONFIG.nomeCompleto,
+        slogan: config?.slogan || CONSULTORIA_CONFIG.slogan,
+        corPrimaria: config?.corPrimaria || CONSULTORIA_CONFIG.corPrimaria,
+        corSecundaria: config?.corSecundaria || CONSULTORIA_CONFIG.corSecundaria,
+        logoUrl: config?.logoUrl || null,
+        versao: CONSULTORIA_CONFIG.versao,
+        ano: CONSULTORIA_CONFIG.ano,
+      }}
+    >
+      {children}
+    </DashboardShell>
+  )
 }

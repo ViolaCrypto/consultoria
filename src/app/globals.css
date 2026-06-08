@@ -9,6 +9,11 @@
   --color-danger: #c81e1e;
   --color-sidebar-bg: #111827;
   --color-sidebar-text: #f9fafb;
+  --cor-primaria: #1a56db;
+  --cor-secundaria: #057a55;
+  --cor-sidebar: #0f172a;
+  --cor-sidebar-texto: #f8fafc;
+  --cor-sidebar-ativo: #1e40af;
 }
 
 @theme inline {

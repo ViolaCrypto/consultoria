@@ -13,12 +13,37 @@ import {
   Paragraph,
   TextRun,
 } from 'docx'
+import { CONSULTORIA_CONFIG } from '@/lib/config/consultoria'
 
 type EmpresaExport = {
   nome: string
 }
 
-const consultoria = 'Plataforma Consultoria'
+type ConfigExport = {
+  nome: string
+  slogan?: string | null
+  logoUrl?: string | null
+  responsavelNome?: string | null
+  responsavelRegistro?: string | null
+  responsavelCargo?: string | null
+  endereco?: string | null
+  telefone?: string | null
+  email?: string | null
+  site?: string | null
+}
+
+async function getConfig(): Promise<ConfigExport> {
+  try {
+    const response = await fetch('/api/configuracoes')
+    if (!response.ok) throw new Error('Config indisponível')
+    return (await response.json()) as ConfigExport
+  } catch {
+    return {
+      nome: CONSULTORIA_CONFIG.nome,
+      slogan: CONSULTORIA_CONFIG.slogan,
+    }
+  }
+}
 
 function slugify(value: string) {
   return value
@@ -83,6 +108,7 @@ export async function exportarPDF(
   nomeArquivo: string,
   empresa: EmpresaExport,
 ) {
+  const config = await getConfig()
   const wrapper = document.createElement('div')
   wrapper.style.position = 'fixed'
   wrapper.style.left = '-9999px'
@@ -94,15 +120,23 @@ export async function exportarPDF(
   wrapper.innerHTML = `
     <div style="padding: 42px;">
       <header style="border-bottom: 2px solid #0f172a; padding-bottom: 18px; margin-bottom: 28px;">
-        <div style="font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #64748b;">${consultoria}</div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          ${config.logoUrl ? `<img src="${config.logoUrl}" style="height:42px; width:42px; object-fit:contain;" />` : ''}
+          <div>
+            <div style="font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #64748b;">${config.nome}</div>
+            <div style="font-size: 12px; color: #64748b;">${config.slogan || ''}</div>
+          </div>
+        </div>
         <h1 style="font-size: 26px; margin: 8px 0 0;">${nomeArquivo}</h1>
-        <p style="font-size: 14px; color: #475569; margin: 8px 0 0;">Empresa: ${empresa.nome} · ${new Date().toLocaleDateString('pt-BR')}</p>
+        <p style="font-size: 14px; color: #475569; margin: 8px 0 0;">Empresa: ${empresa.nome} · ${new Date().toLocaleDateString('pt-BR')} · Versão 1</p>
       </header>
       <main style="font-size: 14px; line-height: 1.65;">
         ${markdownToHtml(conteudo)}
       </main>
       <footer style="border-top: 1px solid #cbd5e1; color: #64748b; font-size: 11px; margin-top: 36px; padding-top: 12px;">
-        ${consultoria} · Documento gerado para ${empresa.nome}
+        ${config.nome} · Documento gerado para ${empresa.nome}<br />
+        Responsável técnico: ${[config.responsavelNome, config.responsavelRegistro, config.responsavelCargo].filter(Boolean).join(' · ') || 'não definido'}<br />
+        ${[config.endereco, config.telefone, config.email, config.site].filter(Boolean).join(' · ')}
       </footer>
     </div>
   `
@@ -182,6 +216,7 @@ export async function exportarWord(
   nomeArquivo: string,
   empresa: EmpresaExport,
 ) {
+  const config = await getConfig()
   const doc = new Document({
     sections: [
       {
@@ -192,7 +227,7 @@ export async function exportarWord(
                 alignment: AlignmentType.CENTER,
                 children: [
                   new TextRun({
-                    text: `${consultoria} · ${empresa.nome}`,
+                    text: `${config.nome} · ${empresa.nome}`,
                     bold: true,
                   }),
                 ],
@@ -207,7 +242,15 @@ export async function exportarWord(
                 alignment: AlignmentType.CENTER,
                 children: [
                   new TextRun(
-                    `Gerado em ${new Date().toLocaleDateString('pt-BR')} · Versão 1`,
+                    [
+                      `Gerado em ${new Date().toLocaleDateString('pt-BR')}`,
+                      'Versão 1',
+                      config.responsavelNome
+                        ? `Responsável: ${config.responsavelNome}${config.responsavelRegistro ? ` · ${config.responsavelRegistro}` : ''}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · '),
                   ),
                 ],
               }),

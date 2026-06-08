@@ -4,8 +4,10 @@ import { gerarInventarioRiscos } from '@/lib/agents/documentos/inventarioRiscos'
 import { gerarMatrizAspectosImpactos } from '@/lib/agents/documentos/matrizAspectosImpactos'
 import { gerarPGRS } from '@/lib/agents/documentos/pgrs'
 import { gerarPlanoEmergencia } from '@/lib/agents/documentos/planoEmergencia'
+import { CONSULTORIA_CONFIG } from '@/lib/config/consultoria'
 import { montarContextoCompleto } from '@/lib/contextoDocumental'
 import { buscarPadroesSetor, normalizarSetor } from '@/lib/memoria'
+import { prisma } from '@/lib/prisma'
 
 type DocProjetoInput = {
   id?: string
@@ -227,7 +229,29 @@ export async function gerarDocumento(
   const contextoDocumental = docProjeto.projetoId
     ? await montarContextoCompleto(docProjeto.projetoId)
     : null
+  const configuracao = await prisma.configuracaoConsultoria.findFirst({
+    orderBy: { updatedAt: 'desc' },
+  })
+  const contextoConsultoria = {
+    nome: configuracao?.nome || CONSULTORIA_CONFIG.nome,
+    nomeCompleto: configuracao?.nomeCompleto || CONSULTORIA_CONFIG.nomeCompleto,
+    slogan: configuracao?.slogan || CONSULTORIA_CONFIG.slogan,
+    responsavelTecnico: {
+      nome: configuracao?.responsavelNome || null,
+      registro: configuracao?.responsavelRegistro || null,
+      cargo: configuracao?.responsavelCargo || null,
+    },
+    rodape: {
+      endereco: configuracao?.endereco || null,
+      telefone: configuracao?.telefone || null,
+      email: configuracao?.email || null,
+      site: configuracao?.site || null,
+    },
+  }
   const contextoCompleto = [
+    'Configuração da consultoria responsável:',
+    JSON.stringify(contextoConsultoria, null, 2),
+    '',
     'Contexto documental disponível:',
     formatarContextoDocumental(contextoDocumental),
     '',

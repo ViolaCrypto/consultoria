@@ -108,6 +108,24 @@ model PadraoDocumento {
   updatedAt           DateTime @updatedAt
 }
 
+model ConfiguracaoConsultoria {
+  id                  String   @id @default(cuid())
+  nome                String   @default("Consultoria SGI")
+  nomeCompleto        String?
+  slogan              String?
+  corPrimaria         String   @default("#1a56db")
+  corSecundaria       String   @default("#057a55")
+  logoUrl             String?
+  responsavelNome     String?
+  responsavelRegistro String?
+  responsavelCargo    String?
+  endereco            String?
+  telefone            String?
+  email               String?
+  site                String?
+  updatedAt           DateTime @updatedAt
+}
+
 model Projeto {
   id          String       @id @default(cuid())
   nome        String
