@@ -50,6 +50,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (docProjeto.conteudo) {
+      await prisma.versaoDocumento.create({
+        data: {
+          docProjetoId: docProjeto.id,
+          versao: docProjeto.versao,
+          conteudo: docProjeto.conteudo,
+        },
+      })
+    }
+
     const problemasTexto = problemas.map((problema) =>
       typeof problema === 'string' ? problema : JSON.stringify(problema),
     )
@@ -135,6 +145,7 @@ export async function POST(request: NextRequest) {
           : validacaoAuditoria.scoreAuditoria,
         status: 'em_revisao',
         geradoPorIA: true,
+        versao: { increment: 1 },
       },
     })
 

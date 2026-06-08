@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { salvarDocumentoAprovado } from '@/lib/memoria'
 import { prisma } from '@/lib/prisma'
@@ -113,6 +113,22 @@ export async function PUT(
     console.error('Erro ao atualizar documento:', error)
     return NextResponse.json(
       { error: 'Não foi possível atualizar o documento.' },
+      { status: 500 },
+    )
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    await prisma.docProjeto.delete({ where: { id } })
+    return NextResponse.json({ success: true })
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erro desconhecido' },
       { status: 500 },
     )
   }

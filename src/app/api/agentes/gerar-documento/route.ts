@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     let docProjeto
+    const isRegeneracao = Boolean(docProjetoId)
 
     if (docProjetoId) {
       docProjeto = await prisma.docProjeto.findUnique({
@@ -98,6 +99,16 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('DocProjeto resolvido:', docProjeto.id, docProjeto.nome)
+
+    if (isRegeneracao && docProjeto.conteudo) {
+      await prisma.versaoDocumento.create({
+        data: {
+          docProjetoId: docProjeto.id,
+          versao: docProjeto.versao,
+          conteudo: docProjeto.conteudo,
+        },
+      })
+    }
 
     const gaps = docProjeto.projeto.avaliacoes.flatMap((avaliacao) =>
       avaliacao.itens.map((item) => ({
@@ -170,6 +181,7 @@ export async function POST(request: NextRequest) {
         scoreQualidade: Number.isFinite(scoreQualidade)
           ? scoreQualidade
           : validacaoAuditoria.scoreAuditoria,
+        versao: isRegeneracao ? { increment: 1 } : docProjeto.versao,
       },
     })
 

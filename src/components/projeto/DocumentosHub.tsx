@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles, UploadCloud } from 'lucide-react'
+import { Sparkles, Trash2, UploadCloud } from 'lucide-react'
 import { exportarPDF, exportarWord, type DocumentoExport } from '@/lib/exportar'
 import { PreviewDocumento } from '@/components/projeto/PreviewDocumento'
 
@@ -28,6 +28,11 @@ type DocumentoHub = {
     urlArquivo: string
     hashArquivo: string | null
     exportadoPor: string | null
+    createdAt: string
+  }[]
+  versoes?: {
+    id: string
+    versao: number
     createdAt: string
   }[]
 }
@@ -71,6 +76,7 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [preview, setPreview] = useState<DocumentoHub | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<DocumentoHub | null>(null)
   const [reviews, setReviews] = useState<Record<string, Revisao>>({})
   const recomendacoes = useMemo(() => buildRecomendacoes(projeto), [projeto])
   const gerados = projeto.documentos.filter((documento) => documento.geradoPorIA).length
@@ -139,6 +145,34 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
     setMessage('Documento gerado com sucesso.')
     setBusyId(null)
     if (refresh) router.refresh()
+  }
+
+  async function regenerate(documentoId: string) {
+    if (!window.confirm('Deseja regenerar este documento? O conteudo atual sera salvo no historico de versoes.')) {
+      return
+    }
+
+    await generate(documentoId)
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return
+
+    setBusyId(`delete-${deleteTarget.id}`)
+    const response = await fetch(`/api/documentos/${deleteTarget.id}`, {
+      method: 'DELETE',
+    })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      console.error('Erro completo:', data)
+      alert(`Erro: ${data?.error || data?.message || JSON.stringify(data).substring(0, 200)}`)
+      setBusyId(null)
+      return
+    }
+
+    setDeleteTarget(null)
+    setBusyId(null)
+    router.refresh()
   }
 
   async function generateAll() {
@@ -271,6 +305,7 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
       <DocumentSection title="Em rascunho" tone="slate" count={countByStatus(projeto.documentos, 'pendente')}>
         {byStatus(projeto.documentos, 'pendente').map((documento) => (
           <Card key={documento.id}>
+            <CardTools documento={documento} onDelete={() => setDeleteTarget(documento)} />
             <CardHeader title={documento.nome} subtitle={originText(documento)} badge={documento.tipo} />
             <div className="mt-4 flex flex-wrap gap-2">
               <Action onClick={() => generate(documento.id)} disabled={busyId === documento.id}>
@@ -285,13 +320,14 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
       <DocumentSection title="Gerados pela IA" tone="amber" count={countByStatus(projeto.documentos, 'em_revisao')}>
         {byStatus(projeto.documentos, 'em_revisao').map((documento) => (
           <Card key={documento.id}>
+            <CardTools documento={documento} onDelete={() => setDeleteTarget(documento)} />
             <CardHeader title={documento.nome} subtitle="Gerado por IA — revisar" badge={`Score ${documento.scoreQualidade ?? '-'}/100`} />
             <PreviewText text={documento.conteudo || ''} onMore={() => setPreview(documento)} />
             {reviews[documento.id] ? <ReviewSummary review={reviews[documento.id]} /> : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <Action onClick={() => setPreview(documento)}>Visualizar completo</Action>
               <Action variant="secondary" onClick={() => updateStatus(documento.id, 'aprovado')}>Aprovar</Action>
-              <Action variant="secondary" onClick={() => generate(documento.id)}>Regenerar com novo contexto</Action>
+              <Action variant="secondary" onClick={() => regenerate(documento.id)}>Regenerar</Action>
               <Action variant="secondary" onClick={() => review(documento.id)} disabled={busyId === `review-${documento.id}`}>Revisar com IA</Action>
             </div>
           </Card>
@@ -301,6 +337,7 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
       <DocumentSection title="Aprovados" tone="green" count={countByStatus(projeto.documentos, 'aprovado')}>
         {byStatus(projeto.documentos, 'aprovado').map((documento) => (
           <Card key={documento.id}>
+            <CardTools documento={documento} onDelete={() => setDeleteTarget(documento)} />
             <CardHeader title={documento.nome} subtitle={`Versão ${documento.versao} · aprovado por ${documento.aprovadoPor || 'humano'} · ${new Date(documento.updatedAt).toLocaleDateString('pt-BR')}`} badge="Aprovado" />
             <div className="mt-4 flex flex-wrap gap-2">
               <Action onClick={() => exportarPDF(toExport(documento), projeto.empresa)}>Exportar PDF</Action>
@@ -314,6 +351,7 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
       <DocumentSection title="Aguardando cliente" tone="orange" count={countByStatus(projeto.documentos, 'aguardando_cliente')}>
         {byStatus(projeto.documentos, 'aguardando_cliente').map((documento) => (
           <Card key={documento.id}>
+            <CardTools documento={documento} onDelete={() => setDeleteTarget(documento)} />
             <CardHeader title={documento.nome} subtitle={originText(documento)} badge="Aguardando cliente" />
             <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-700">
               <UploadCloud className="h-4 w-4" />
@@ -331,6 +369,7 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
       <DocumentSection title="Entregues" tone="purple" count={countByStatus(projeto.documentos, 'entregue')}>
         {byStatus(projeto.documentos, 'entregue').map((documento) => (
           <Card key={documento.id}>
+            <CardTools documento={documento} onDelete={() => setDeleteTarget(documento)} />
             <CardHeader title={documento.nome} subtitle={`Entregue em ${new Date(documento.updatedAt).toLocaleDateString('pt-BR')}`} badge="Entregue" />
             {documento.urlExportado ? (
               <a className="mt-3 inline-block text-sm font-medium text-blue-700 underline" href={documento.urlExportado}>
@@ -348,6 +387,14 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
           regenerando={busyId === `regen-${preview.id}`}
           onRegenerarCorrigindo={(problemas) => regenerateFixing(preview.id, problemas)}
           onClose={() => setPreview(null)}
+        />
+      ) : null}
+      {deleteTarget ? (
+        <ConfirmDeleteModal
+          documento={deleteTarget}
+          isDeleting={busyId === `delete-${deleteTarget.id}`}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDelete}
         />
       ) : null}
     </section>
@@ -447,7 +494,25 @@ function DocumentSection({
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <article className="overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm">{children}</article>
+  return <article className="relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 pr-20 shadow-sm">{children}</article>
+}
+
+function CardTools({ documento, onDelete }: { documento: DocumentoHub; onDelete: () => void }) {
+  return (
+    <div className="absolute right-3 top-3 flex items-center gap-2">
+      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+        v{documento.versao}
+      </span>
+      <button
+        type="button"
+        onClick={onDelete}
+        title="Excluir documento"
+        className="rounded-md p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
+  )
 }
 
 function CardHeader({ title, subtitle, badge }: { title: string; subtitle: string; badge: string }) {
@@ -548,7 +613,7 @@ function FullPreview({
           />
           {documento.exportacoes.length > 0 ? (
             <div className="mt-6 rounded-md bg-slate-50 p-4">
-              <h4 className="font-semibold text-slate-950">Histórico de versões</h4>
+              <h4 className="font-semibold text-slate-950">Histórico de exportações</h4>
               <ul className="mt-2 space-y-1 text-sm text-slate-700">
                 {documento.exportacoes.map((exportacao) => (
                   <li key={exportacao.id} className="break-words">
@@ -558,6 +623,62 @@ function FullPreview({
               </ul>
             </div>
           ) : null}
+          {documento.versoes?.length ? (
+            <div className="mt-6 rounded-md bg-slate-50 p-4">
+              <h4 className="font-semibold text-slate-950">Histórico de versões do conteúdo</h4>
+              <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                {documento.versoes.map((versao) => (
+                  <li key={versao.id} className="break-words">
+                    v{versao.versao} salva em {new Date(versao.createdAt).toLocaleString('pt-BR')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ConfirmDeleteModal({
+  documento,
+  isDeleting,
+  onCancel,
+  onConfirm,
+}: {
+  documento: DocumentoHub
+  isDeleting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 px-4">
+      <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+        <h3 className="break-words text-lg font-semibold text-slate-950">Excluir documento</h3>
+        <p className="mt-2 break-words text-sm text-slate-600">
+          Tem certeza que deseja excluir este documento? Esta acao nao pode ser desfeita.
+        </p>
+        <p className="mt-3 break-words rounded-md bg-slate-50 p-3 text-sm font-medium text-slate-700">
+          {documento.nome} - v{documento.versao}
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={isDeleting}
+            onClick={onCancel}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={isDeleting}
+            onClick={onConfirm}
+            className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+          >
+            {isDeleting ? 'Excluindo...' : 'Excluir'}
+          </button>
         </div>
       </div>
     </div>

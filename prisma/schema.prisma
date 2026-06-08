@@ -238,6 +238,7 @@ model DocProjeto {
   versao      Int      @default(1)
   aprovadoPor String?
   exportacoes Exportacao[]
+  versoes     VersaoDocumento[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -245,11 +246,20 @@ model DocProjeto {
 model Exportacao {
   id            String     @id @default(cuid())
   docProjetoId  String
-  docProjeto    DocProjeto @relation(fields: [docProjetoId], references: [id])
+  docProjeto    DocProjeto @relation(fields: [docProjetoId], references: [id], onDelete: Cascade)
   formato       String
   versao        Int
   urlArquivo    String
   hashArquivo   String?
   exportadoPor  String?
+  createdAt     DateTime   @default(now())
+}
+
+model VersaoDocumento {
+  id            String     @id @default(cuid())
+  docProjetoId  String
+  docProjeto    DocProjeto @relation(fields: [docProjetoId], references: [id], onDelete: Cascade)
+  versao        Int
+  conteudo      String     @db.Text
   createdAt     DateTime   @default(now())
 }

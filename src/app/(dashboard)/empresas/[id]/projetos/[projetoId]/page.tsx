@@ -52,6 +52,9 @@ export default async function ProjetoDetalhePage({
           exportacoes: {
             orderBy: { createdAt: 'desc' },
           },
+          versoes: {
+            orderBy: { createdAt: 'desc' },
+          },
         },
         orderBy: {
           updatedAt: 'desc',
@@ -180,6 +183,11 @@ export default async function ProjetoDetalhePage({
         hashArquivo: exportacao.hashArquivo,
         exportadoPor: exportacao.exportadoPor,
         createdAt: exportacao.createdAt.toISOString(),
+      })),
+      versoes: documento.versoes.map((versao) => ({
+        id: versao.id,
+        versao: versao.versao,
+        createdAt: versao.createdAt.toISOString(),
       })),
     })),
     modelosDisponiveis: modelosDisponiveis.map((modelo) => ({
