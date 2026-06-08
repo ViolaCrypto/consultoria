@@ -81,7 +81,7 @@ export function PreviewDocumento({
         )}
       </section>
 
-      <div className="prose prose-sm max-w-none break-words prose-slate">
+      <div className="prose prose-slate max-w-none break-words">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
           {documento.conteudo || 'Sem conteudo.'}
         </ReactMarkdown>
