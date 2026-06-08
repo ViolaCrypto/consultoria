@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma'
 type ExecutarComRaciocinioOptions = {
   docProjetoId?: string
   maxTokens?: number
+  model?: 'gpt-4o' | 'gpt-4o-mini'
+  temperature?: number
 }
 
 export type ResultadoComRaciocinio<T> = {
@@ -20,8 +22,9 @@ export async function executarComRaciocinio<T>(
   options: ExecutarComRaciocinioOptions = {},
 ): Promise<ResultadoComRaciocinio<T | string>> {
   const analise = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: options.model || 'gpt-4o-mini',
     max_tokens: 1600,
+    temperature: options.temperature,
     messages: [
       {
         role: 'system',
@@ -42,8 +45,9 @@ export async function executarComRaciocinio<T>(
     'A IA não retornou análise técnica preliminar.'
 
   const final = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: options.model || 'gpt-4o-mini',
     max_tokens: options.maxTokens || 3500,
+    temperature: options.temperature,
     response_format: schema ? { type: 'json_object' } : undefined,
     messages: [
       {

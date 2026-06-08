@@ -28,7 +28,10 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(documento)
+    return NextResponse.json({
+      ...documento,
+      validacaoAuditoria: getValidacaoAuditoria(documento.metadados),
+    })
   } catch (error) {
     console.error('Erro ao buscar documento:', error)
     return NextResponse.json(

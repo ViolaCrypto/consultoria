@@ -21,6 +21,7 @@ type DocumentoPreview = {
   nome: string
   conteudo: string | null
   metadados?: unknown
+  validacaoAuditoria?: unknown
 }
 
 export function PreviewDocumento({
@@ -32,7 +33,7 @@ export function PreviewDocumento({
   onRegenerarCorrigindo?: (problemas: ProblemaAuditoria[]) => void
   regenerando?: boolean
 }) {
-  const validacao = getValidacaoAuditoria(documento.metadados)
+  const validacao = getValidacaoAuditoria(documento)
   const problemas = validacao?.problemas || []
 
   return (
@@ -90,17 +91,49 @@ export function PreviewDocumento({
   )
 }
 
-function getValidacaoAuditoria(metadados: unknown): ValidacaoAuditoria | null {
+function getValidacaoAuditoria(documento: DocumentoPreview): ValidacaoAuditoria | null {
+  const metadados = parseJsonIfNeeded(documento.metadados)
+  const validacaoDireta = parseJsonIfNeeded(documento.validacaoAuditoria)
+
+  if (isValidacaoAuditoria(validacaoDireta)) {
+    return normalizeValidacao(validacaoDireta)
+  }
+
   if (!metadados || typeof metadados !== 'object') {
     return null
   }
 
   const validacao = (metadados as { validacaoAuditoria?: unknown }).validacaoAuditoria
-  if (!validacao || typeof validacao !== 'object') {
+  const parsedValidacao = parseJsonIfNeeded(validacao)
+  if (!isValidacaoAuditoria(parsedValidacao)) {
     return null
   }
 
-  return validacao as ValidacaoAuditoria
+  return normalizeValidacao(parsedValidacao)
+}
+
+function parseJsonIfNeeded(value: unknown) {
+  if (typeof value !== 'string') return value
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
+}
+
+function isValidacaoAuditoria(value: unknown): value is Partial<ValidacaoAuditoria> {
+  return Boolean(value && typeof value === 'object' && 'problemas' in value)
+}
+
+function normalizeValidacao(value: Partial<ValidacaoAuditoria>): ValidacaoAuditoria {
+  return {
+    scoreAuditoria:
+      typeof value.scoreAuditoria === 'number' ? value.scoreAuditoria : 0,
+    aprovadoAuditoria: Boolean(value.aprovadoAuditoria),
+    problemas: Array.isArray(value.problemas) ? value.problemas : [],
+    temProblemasCriticos: Boolean(value.temProblemasCriticos),
+  }
 }
 
 function tone(severidade: ProblemaAuditoria['severidade']) {

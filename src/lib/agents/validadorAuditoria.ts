@@ -155,6 +155,75 @@ export function validarComoAuditor(
     }
   }
 
+  if (tipo === 'pgr') {
+    if (!conteudo.match(/elimina..o[\s\S]*substitui..o[\s\S]*engenharia[\s\S]*administrativ[\s\S]*EPI/i)) {
+      problemas.push({
+        severidade: 'alta',
+        tipo: 'metodologia',
+        descricao:
+          'PGR nao menciona hierarquia de controles (NR-01 item 1.5.5): Eliminacao, Substituicao, Engenharia, Administrativa, EPI',
+      })
+      score.total -= 10
+    }
+
+    if (!conteudo.match(/probabilidade[\s\S]*gravidade/i)) {
+      problemas.push({
+        severidade: 'alta',
+        tipo: 'metodologia',
+        descricao:
+          'PGR nao apresenta matriz probabilidade x gravidade para classificacao de risco',
+      })
+      score.total -= 10
+    }
+
+    if (!conteudo.match(/CIPA|NR.{0,3}05/i)) {
+      problemas.push({
+        severidade: 'alta',
+        tipo: 'estrutura',
+        descricao: 'PGR nao menciona CIPA / NR-05 - obrigatorio',
+      })
+      score.total -= 10
+    }
+
+    if (!conteudo.match(/vig.ncia|validade|2\s*anos|3\s*anos/i)) {
+      problemas.push({
+        severidade: 'alta',
+        tipo: 'controle',
+        descricao: 'PGR sem definicao clara de vigencia (2 anos ou 3 anos com SGSST)',
+      })
+      score.total -= 10
+    }
+
+    if (!conteudo.match(/plano\s+de\s+a..o/i)) {
+      problemas.push({
+        severidade: 'critica',
+        tipo: 'estrutura',
+        descricao: 'PGR sem Plano de Acao - obrigatorio NR-01',
+      })
+      score.total -= 20
+    }
+
+    const nrsCitadas = [...conteudo.matchAll(/NR[\s-]?(\d{1,2})/gi)]
+    if (nrsCitadas.length < 5) {
+      problemas.push({
+        severidade: 'media',
+        tipo: 'fundamentacao',
+        descricao: `PGR cita apenas ${nrsCitadas.length} NRs - documento tecnico deveria fundamentar com mais normas`,
+      })
+      score.total -= 5
+    }
+
+    if (conteudo.match(/EPI/i) && !conteudo.match(/CA\s*\d|certificado\s+de\s+aprova/i)) {
+      problemas.push({
+        severidade: 'alta',
+        tipo: 'epi',
+        descricao:
+          'PGR cita EPIs sem mencionar CA (Certificado de Aprovacao) - obrigatorio NR-06',
+      })
+      score.total -= 10
+    }
+  }
+
   const temEmoji = /[\u{1F300}-\u{1F9FF}]/u.test(conteudo)
   if (temEmoji) {
     problemas.push({
