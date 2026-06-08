@@ -48,6 +48,11 @@ export default async function ProjetoDetalhePage({
         },
       },
       documentos: {
+        include: {
+          exportacoes: {
+            orderBy: { createdAt: 'desc' },
+          },
+        },
         orderBy: {
           updatedAt: 'desc',
         },
@@ -143,6 +148,7 @@ export default async function ProjetoDetalhePage({
           descricao: item.requisito.descricao,
           evidenciaEsperada: item.requisito.evidenciaEsperada,
           documentoEsperado: item.requisito.documentoEsperado,
+          categoria: item.requisito.categoria,
         },
       })),
     })),
@@ -153,6 +159,12 @@ export default async function ProjetoDetalhePage({
       status: documento.status,
       conteudo: documento.conteudo,
       versao: documento.versao,
+      requisitosOrigem: documento.requisitosOrigem,
+      geradoPorIA: documento.geradoPorIA,
+      scoreQualidade: documento.scoreQualidade,
+      aprovadoPor: documento.aprovadoPor,
+      urlExportado: documento.urlExportado,
+      createdAt: documento.createdAt.toISOString(),
       metadados:
         documento.metadados &&
         typeof documento.metadados === 'object' &&
@@ -160,6 +172,15 @@ export default async function ProjetoDetalhePage({
           ? documento.metadados
           : null,
       updatedAt: documento.updatedAt.toISOString(),
+      exportacoes: documento.exportacoes.map((exportacao) => ({
+        id: exportacao.id,
+        formato: exportacao.formato,
+        versao: exportacao.versao,
+        urlArquivo: exportacao.urlArquivo,
+        hashArquivo: exportacao.hashArquivo,
+        exportadoPor: exportacao.exportadoPor,
+        createdAt: exportacao.createdAt.toISOString(),
+      })),
     })),
     modelosDisponiveis: modelosDisponiveis.map((modelo) => ({
       id: modelo.id,

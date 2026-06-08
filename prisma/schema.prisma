@@ -231,6 +231,9 @@ model DocProjeto {
   // rascunho / em_revisao / aprovado / exportado / entregue
   conteudo    String?  @db.Text
   metadados   Json?
+  requisitosOrigem String[] @default([])
+  geradoPorIA Boolean @default(false)
+  scoreQualidade Int?
   urlExportado String?
   versao      Int      @default(1)
   aprovadoPor String?

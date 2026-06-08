@@ -7,6 +7,7 @@ const documentoPlanejadoSchema = z.object({
   prioridade: z.number().int().min(1).max(5),
   motivo: z.string(),
   dependencias: z.array(z.string()),
+  requisitosOrigem: z.array(z.string()).default([]),
 })
 
 const planoSchema = z.object({
@@ -41,7 +42,13 @@ export async function planejarDocumentos(
           'documentos_solicitar_cliente: exigíveis do cliente, não geráveis pela IA.',
           'documentos_urgentes: legais vencidos, ausentes ou críticos.',
           '',
-          'Cada item deve ter: nome, tipo, prioridade (1-5), motivo, dependencias.',
+          'Planeje documentos para TODOS os gaps identificados, nÃ£o apenas os crÃ­ticos.',
+          'Inclua tambÃ©m documentos tÃ­picos e obrigatÃ³rios do setor quando eles aparecerem na ontologia.',
+          'Para metalurgia, considere especialmente: PolÃ­tica Ambiental, PolÃ­tica SST, Matriz de Aspectos e Impactos, InventÃ¡rio de Riscos, PGR, PCMSO, Plano de EmergÃªncia, PGRS, Procedimento de Controle de ResÃ­duos, Matriz de Treinamentos, Plano de AÃ§Ã£o, InventÃ¡rio de Produtos QuÃ­micos, Procedimento de GestÃ£o de FISPQ.',
+          'Para quÃ­mico, inclua tambÃ©m: Plano de Atendimento a EmergÃªncia QuÃ­mica, InventÃ¡rio de SubstÃ¢ncias Perigosas, Procedimento de Armazenamento QuÃ­mico.',
+          '',
+          'Cada item deve ter: nome, tipo, prioridade (1-5), motivo, dependencias, requisitosOrigem.',
+          'Use requisitosOrigem com os IDs dos requisitos que originaram o documento quando existirem.',
           '',
           'Dados:',
           JSON.stringify({ projeto, gapAnalysis, ontologia }, null, 2),

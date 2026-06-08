@@ -82,6 +82,12 @@ export async function POST(request: Request) {
       docProjeto.projeto.anamnese?.perfilOperacional || null,
     )
 
+    const autoRevisao = documentoGerado.metadados.autoRevisao
+    const scoreQualidade =
+      autoRevisao && typeof autoRevisao === 'object' && 'score' in autoRevisao
+        ? Number((autoRevisao as { score?: unknown }).score)
+        : undefined
+
     const updated = await prisma.docProjeto.update({
       where: { id: docProjetoId },
       data: {
@@ -89,6 +95,8 @@ export async function POST(request: Request) {
         metadados: JSON.parse(
           JSON.stringify(documentoGerado.metadados),
         ) as Prisma.InputJsonValue,
+        geradoPorIA: true,
+        scoreQualidade: Number.isFinite(scoreQualidade) ? scoreQualidade : undefined,
         status: 'em_revisao',
       },
     })

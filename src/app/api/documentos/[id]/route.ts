@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 const documentoUpdateSchema = z.object({
   status: z
-    .enum(['pendente', 'em_revisao', 'aprovado', 'exportado', 'entregue'])
+    .enum(['pendente', 'em_revisao', 'aprovado', 'exportado', 'entregue', 'aguardando_cliente'])
     .optional(),
   conteudo: z.string().optional().nullable(),
 })

@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import { CalendarDays, FileImage, FileText, FileType, ListChecks, Sparkles } from 'lucide-react'
 import { AnamneseForm, type AnamneseData } from '@/components/projeto/AnamneseForm'
 import { ChecklistRapido } from '@/components/projeto/ChecklistRapido'
+import { DocumentosHub } from '@/components/projeto/DocumentosHub'
 import { OnboardingGuia } from '@/components/projeto/OnboardingGuia'
 import { ZonaIngestao } from '@/components/projeto/ZonaIngestao'
 import { exportarPDF, exportarWord, gerarPreviewHtml, type DocumentoExport } from '@/lib/exportar'
@@ -62,14 +63,15 @@ type ItemAvaliacaoData = {
   status: string
   confiancaIA: string | null
   observacao: string | null
-  requisito: {
-    id: string
-    codigo: string | null
-    titulo: string
-    descricao: string | null
-    evidenciaEsperada: string | null
-    documentoEsperado: string | null
-  }
+    requisito: {
+      id: string
+      codigo: string | null
+      titulo: string
+      descricao: string | null
+      categoria?: string | null
+      evidenciaEsperada: string | null
+      documentoEsperado: string | null
+    }
 }
 
 type AvaliacaoData = {
@@ -101,6 +103,12 @@ type DocumentoData = {
   status: string
   conteudo: string | null
   versao: number
+  requisitosOrigem: string[]
+  geradoPorIA: boolean
+  scoreQualidade: number | null
+  aprovadoPor: string | null
+  urlExportado: string | null
+  createdAt: string
   metadados: {
     raciocinioIA?: string
     agente?: string
@@ -116,6 +124,15 @@ type DocumentoData = {
     }
   } | null
   updatedAt: string
+  exportacoes: {
+    id: string
+    formato: string
+    versao: number
+    urlArquivo: string
+    hashArquivo: string | null
+    exportadoPor: string | null
+    createdAt: string
+  }[]
 }
 
 type ProjetoData = {
@@ -331,7 +348,7 @@ export function ProjetoTabs({ projeto }: { projeto: ProjetoData }) {
           />
         ) : null}
         {activeTab === 'Documentos' ? (
-          <DocumentosTab documentos={projeto.documentos} empresa={projeto.empresa} />
+          <DocumentosHub projeto={projeto} />
         ) : null}
       </div>
     </div>
