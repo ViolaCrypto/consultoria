@@ -1,10 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { ArrowLeft, MapPin, Plus } from 'lucide-react'
-import { ProjetoForm } from '@/components/projeto/ProjetoForm'
 
 type ProjetoResumo = {
   id: string
@@ -25,14 +22,6 @@ type EmpresaDetalhe = {
 }
 
 export function EmpresaDetalheClient({ empresa }: { empresa: EmpresaDetalhe }) {
-  const router = useRouter()
-  const [isModalOpen, setIsModalOpen] = useState(false)
-
-  function handleCreated() {
-    setIsModalOpen(false)
-    router.refresh()
-  }
-
   return (
     <div className="mx-auto max-w-6xl">
       <Link
@@ -72,14 +61,13 @@ export function EmpresaDetalheClient({ empresa }: { empresa: EmpresaDetalhe }) {
                 <Plus className="h-4 w-4" />
                 Nova empresa
               </Link>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(true)}
+              <Link
+                href={`/empresas/${empresa.id}/projetos/novo`}
                 className="inline-flex items-center gap-2 rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
               >
                 <Plus className="h-4 w-4" />
                 Novo projeto
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -140,35 +128,6 @@ export function EmpresaDetalheClient({ empresa }: { empresa: EmpresaDetalhe }) {
           </div>
         )}
       </section>
-
-      {isModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-8">
-          <div className="w-full max-w-xl rounded-lg bg-white p-6 shadow-xl">
-            <div className="mb-6 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-950">
-                  Criar projeto
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Defina o escopo inicial do atendimento.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="rounded-md px-2 py-1 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-              >
-                Fechar
-              </button>
-            </div>
-            <ProjetoForm
-              empresaId={empresa.id}
-              onCreated={handleCreated}
-              onCancel={() => setIsModalOpen(false)}
-            />
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

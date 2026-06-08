@@ -14,6 +14,7 @@ const projetoSchema = z.object({
   ]),
   status: z.enum(['em_andamento', 'concluido', 'pausado']),
   empresaId: z.string().trim().min(1, 'Empresa é obrigatória'),
+  modeloIds: z.array(z.string().trim().min(1)).optional(),
 })
 
 export async function GET(request: Request) {
@@ -48,8 +49,37 @@ export async function POST(request: Request) {
     const body = await request.json()
     const data = projetoSchema.parse(body)
 
-    const projeto = await prisma.projeto.create({
-      data,
+    const projeto = await prisma.$transaction(async (tx) => {
+      const created = await tx.projeto.create({
+        data: {
+          nome: data.nome,
+          tipo: data.tipo,
+          status: data.status,
+          empresaId: data.empresaId,
+        },
+      })
+
+      for (const modeloId of data.modeloIds || []) {
+        const requisitos = await tx.requisito.findMany({
+          where: { modeloId },
+          select: { id: true },
+        })
+
+        await tx.avaliacao.create({
+          data: {
+            projetoId: created.id,
+            modeloId,
+            itens: {
+              create: requisitos.map((requisito) => ({
+                requisitoId: requisito.id,
+                status: 'precisa_validacao',
+              })),
+            },
+          },
+        })
+      }
+
+      return created
     })
 
     return NextResponse.json(projeto, { status: 201 })

@@ -6,8 +6,16 @@ import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import { CalendarDays, FileImage, FileText, FileType, ListChecks, Sparkles } from 'lucide-react'
 import { AnamneseForm, type AnamneseData } from '@/components/projeto/AnamneseForm'
+import { ChecklistRapido } from '@/components/projeto/ChecklistRapido'
+import { OnboardingGuia } from '@/components/projeto/OnboardingGuia'
 import { ZonaIngestao } from '@/components/projeto/ZonaIngestao'
 import { exportarPDF, exportarWord } from '@/lib/exportar'
+import {
+  getOnboardingSteps,
+  isOnboardingComplete,
+  isProjectAtStart,
+  type OnboardingStepId,
+} from '@/lib/projeto-onboarding'
 
 type ArquivoAnalise = {
   tipoDetectado?: string
@@ -234,10 +242,23 @@ export function ProjetoTabs({ projeto }: { projeto: ProjetoData }) {
   const [activeTab, setActiveTab] = useState('Visão Geral')
   const [selectedAvaliacaoId, setSelectedAvaliacaoId] = useState<string | null>(null)
   const qualidadeContexto = calcularQualidadeContexto(projeto)
+  const onboardingSteps = getOnboardingSteps(projeto)
 
   function openGap(avaliacaoId: string) {
     setSelectedAvaliacaoId(avaliacaoId)
     setActiveTab('Gap Analysis')
+  }
+
+  function goToStep(step: OnboardingStepId) {
+    const tabByStep: Record<OnboardingStepId, string> = {
+      anamnese: 'Anamnese',
+      arquivos: 'Arquivos',
+      modelos: 'Modelos de Avaliação',
+      gap: 'Gap Analysis',
+      diagnostico: 'Visão Geral',
+    }
+
+    setActiveTab(tabByStep[step])
   }
 
   return (
@@ -285,7 +306,12 @@ export function ProjetoTabs({ projeto }: { projeto: ProjetoData }) {
       </div>
 
       <div className="mt-6">
-        {activeTab === 'Visão Geral' ? <VisaoGeral projeto={projeto} /> : null}
+        <div className="mb-6">
+          <ChecklistRapido steps={onboardingSteps} />
+        </div>
+        {activeTab === 'Visão Geral' ? (
+          <VisaoGeral projeto={projeto} onboardingSteps={onboardingSteps} onStepAction={goToStep} />
+        ) : null}
         {activeTab === 'Arquivos' ? (
           <ArquivosTab projetoId={projeto.id} arquivos={projeto.arquivos} />
         ) : null}
@@ -311,7 +337,15 @@ export function ProjetoTabs({ projeto }: { projeto: ProjetoData }) {
   )
 }
 
-function VisaoGeral({ projeto }: { projeto: ProjetoData }) {
+function VisaoGeral({
+  projeto,
+  onboardingSteps,
+  onStepAction,
+}: {
+  projeto: ProjetoData
+  onboardingSteps: ReturnType<typeof getOnboardingSteps>
+  onStepAction: (step: OnboardingStepId) => void
+}) {
   const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isPlanning, setIsPlanning] = useState(false)
@@ -369,6 +403,10 @@ function VisaoGeral({ projeto }: { projeto: ProjetoData }) {
 
   return (
     <section className="grid gap-6">
+      {isProjectAtStart(projeto) && !isOnboardingComplete(projeto) ? (
+        <OnboardingGuia steps={onboardingSteps} onAction={onStepAction} />
+      ) : null}
+
       <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
           <div
@@ -406,6 +444,7 @@ function VisaoGeral({ projeto }: { projeto: ProjetoData }) {
               type="button"
               onClick={gerarDiagnostico}
               disabled={isGenerating}
+              title="Gera relatório técnico completo baseado em todos os dados do projeto"
               className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
               <Sparkles className="h-4 w-4" />
@@ -814,6 +853,7 @@ function GapAnalysisTab({
                 type="button"
                 onClick={suggestWithAi}
                 disabled={isGenerating}
+                title="A IA avalia cada requisito com base no perfil operacional e nos documentos disponíveis"
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isGenerating ? 'Sugerindo...' : 'Sugerir com IA'}

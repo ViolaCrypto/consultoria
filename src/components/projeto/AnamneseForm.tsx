@@ -291,6 +291,7 @@ export function AnamneseForm({
             type="button"
             disabled={isGeneratingProfile}
             onClick={gerarPerfil}
+            title="A IA analisa a anamnese e os documentos importados para mapear processos, riscos e aspectos da empresa"
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isGeneratingProfile ? 'Gerando...' : perfil ? 'Regenerar' : 'Gerar Perfil com IA'}
