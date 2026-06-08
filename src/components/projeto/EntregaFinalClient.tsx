@@ -8,6 +8,8 @@ type DocumentoAprovado = {
   id: string
   nome: string
   tipo: string
+  status: string
+  versao: number
   conteudo: string | null
 }
 
@@ -32,7 +34,17 @@ export function EntregaFinalClient({ projeto }: { projeto: EntregaProjeto }) {
   async function exportAll() {
     for (const documento of projeto.documentos) {
       if (documento.conteudo) {
-        await exportarPDF(documento.conteudo, documento.nome, projeto.empresa)
+        await exportarPDF(
+          {
+            id: documento.id,
+            nome: documento.nome,
+            tipo: documento.tipo,
+            status: documento.status,
+            versao: documento.versao,
+            conteudo: documento.conteudo,
+          },
+          projeto.empresa,
+        )
       }
     }
   }
@@ -145,7 +157,17 @@ export function EntregaFinalClient({ projeto }: { projeto: EntregaProjeto }) {
                       type="button"
                       onClick={() =>
                         documento.conteudo &&
-                        exportarPDF(documento.conteudo, documento.nome, projeto.empresa)
+                        exportarPDF(
+                          {
+                            id: documento.id,
+                            nome: documento.nome,
+                            tipo: documento.tipo,
+                            status: documento.status,
+                            versao: documento.versao,
+                            conteudo: documento.conteudo,
+                          },
+                          projeto.empresa,
+                        )
                       }
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                     >
@@ -155,7 +177,17 @@ export function EntregaFinalClient({ projeto }: { projeto: EntregaProjeto }) {
                       type="button"
                       onClick={() =>
                         documento.conteudo &&
-                        exportarWord(documento.conteudo, documento.nome, projeto.empresa)
+                        exportarWord(
+                          {
+                            id: documento.id,
+                            nome: documento.nome,
+                            tipo: documento.tipo,
+                            status: documento.status,
+                            versao: documento.versao,
+                            conteudo: documento.conteudo,
+                          },
+                          projeto.empresa,
+                        )
                       }
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                     >

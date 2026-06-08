@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
@@ -9,7 +9,7 @@ import { AnamneseForm, type AnamneseData } from '@/components/projeto/AnamneseFo
 import { ChecklistRapido } from '@/components/projeto/ChecklistRapido'
 import { OnboardingGuia } from '@/components/projeto/OnboardingGuia'
 import { ZonaIngestao } from '@/components/projeto/ZonaIngestao'
-import { exportarPDF, exportarWord } from '@/lib/exportar'
+import { exportarPDF, exportarWord, gerarPreviewHtml, type DocumentoExport } from '@/lib/exportar'
 import {
   getOnboardingSteps,
   isOnboardingComplete,
@@ -100,6 +100,7 @@ type DocumentoData = {
   tipo: string
   status: string
   conteudo: string | null
+  versao: number
   metadados: {
     raciocinioIA?: string
     agente?: string
@@ -1099,6 +1100,7 @@ function DocumentoCard({
   const [isReviewing, setIsReviewing] = useState(false)
   const [forceApproval, setForceApproval] = useState(false)
   const [showReasoning, setShowReasoning] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [review, setReview] = useState<ResultadoRevisao | null>(null)
   const [error, setError] = useState('')
   const canApprove =
@@ -1223,22 +1225,13 @@ function DocumentoCard({
             </button>
           ) : null}
           {documento.status === 'aprovado' && documento.conteudo ? (
-            <>
-              <button
-                type="button"
-                onClick={() => exportarPDF(documento.conteudo || '', documento.nome, empresa)}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Exportar PDF
-              </button>
-              <button
-                type="button"
-                onClick={() => exportarWord(documento.conteudo || '', documento.nome, empresa)}
-                className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Exportar Word
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setIsPreviewOpen(true)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Visualizar antes de exportar
+            </button>
           ) : null}
           {canApprove ? (
             <button
@@ -1313,6 +1306,95 @@ function DocumentoCard({
           </div>
         </div>
       ) : null}
+
+      {isPreviewOpen && documento.conteudo ? (
+        <DocumentoPreviewModal
+          documento={toDocumentoExport(documento)}
+          empresa={empresa}
+          onClose={() => setIsPreviewOpen(false)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function toDocumentoExport(documento: DocumentoData): DocumentoExport {
+  return {
+    id: documento.id,
+    nome: documento.nome,
+    tipo: documento.tipo,
+    status: documento.status,
+    versao: documento.versao,
+    conteudo: documento.conteudo || '',
+  }
+}
+
+function DocumentoPreviewModal({
+  documento,
+  empresa,
+  onClose,
+}: {
+  documento: DocumentoExport
+  empresa: { nome: string }
+  onClose: () => void
+}) {
+  const [html, setHtml] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    gerarPreviewHtml(documento, empresa).then((preview) => {
+      if (active) {
+        setHtml(preview)
+        setIsLoading(false)
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [documento, empresa])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 py-6">
+      <div className="flex h-full w-full max-w-6xl flex-col rounded-lg bg-white shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div>
+            <h3 className="font-semibold text-slate-950">Visualização de exportação</h3>
+            <p className="text-sm text-slate-600">{documento.nome}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => exportarPDF(documento, empresa)}
+              className="rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+            >
+              Exportar PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => exportarWord(documento, empresa)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Exportar Word
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-100">
+          {isLoading ? (
+            <div className="p-8 text-center text-sm text-slate-600">Gerando preview...</div>
+          ) : (
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+          )}
+        </div>
+      </div>
     </div>
   )
 }

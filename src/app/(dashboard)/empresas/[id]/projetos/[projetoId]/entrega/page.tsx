@@ -63,6 +63,8 @@ export default async function EntregaFinalPage({
             id: documento.id,
             nome: documento.nome,
             tipo: documento.tipo,
+            status: documento.status,
+            versao: documento.versao,
             conteudo: documento.conteudo,
           })),
         }}

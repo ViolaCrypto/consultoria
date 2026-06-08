@@ -152,6 +152,7 @@ export default async function ProjetoDetalhePage({
       tipo: documento.tipo,
       status: documento.status,
       conteudo: documento.conteudo,
+      versao: documento.versao,
       metadados:
         documento.metadados &&
         typeof documento.metadados === 'object' &&
