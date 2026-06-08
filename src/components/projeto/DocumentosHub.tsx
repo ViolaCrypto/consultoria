@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation'
 import { Sparkles, Trash2, UploadCloud } from 'lucide-react'
 import { exportarPDF, exportarWord, type DocumentoExport } from '@/lib/exportar'
 import { PreviewDocumento } from '@/components/projeto/PreviewDocumento'
+import {
+  CATEGORIAS_DOCUMENTO,
+  getDocumentoInfo,
+  getDocumentosRecomendadosPorSetor,
+  type CategoriaAutonomia,
+  type GrupoDocumento,
+} from '@/lib/ontologia/documentos'
 
 type DocumentoHub = {
   id: string
@@ -61,6 +68,9 @@ type Recomendacao = {
   tipo: string
   origem: string
   requisitosOrigem: string[]
+  categoriaAutonomia: CategoriaAutonomia
+  grupo: GrupoDocumento
+  motivoParceria?: string
 }
 
 type Revisao = {
@@ -79,6 +89,15 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
   const [deleteTarget, setDeleteTarget] = useState<DocumentoHub | null>(null)
   const [reviews, setReviews] = useState<Record<string, Revisao>>({})
   const recomendacoes = useMemo(() => buildRecomendacoes(projeto), [projeto])
+  const recomendacoesAutonomas = recomendacoes.filter(
+    (item) => item.categoriaAutonomia === CATEGORIAS_DOCUMENTO.CONSULTORIA_AUTONOMA,
+  )
+  const recomendacoesParceria = recomendacoes.filter(
+    (item) => item.categoriaAutonomia === CATEGORIAS_DOCUMENTO.REQUER_PARCERIA_TECNICA,
+  )
+  const recomendacoesCliente = recomendacoes.filter(
+    (item) => item.categoriaAutonomia === CATEGORIAS_DOCUMENTO.EXIGIVEL_CLIENTE,
+  )
   const gerados = projeto.documentos.filter((documento) => documento.geradoPorIA).length
   const aprovados = projeto.documentos.filter((documento) => documento.status === 'aprovado').length
   const geraveisPendentes = projeto.documentos.filter(
@@ -122,6 +141,32 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
     }
 
     setMessage('Documento gerado com sucesso.')
+    setBusyId(null)
+    router.refresh()
+  }
+
+  async function createWaitingDocument(recomendacao: Recomendacao, label: string) {
+    setBusyId(recomendacao.nome)
+    setMessage('')
+    const response = await fetch('/api/documentos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projetoId: projeto.id,
+        nome: recomendacao.nome,
+        tipo: recomendacao.tipo,
+        status: 'aguardando_cliente',
+        requisitosOrigem: recomendacao.requisitosOrigem || [],
+      }),
+    })
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      console.error('Erro completo:', data)
+      alert(`Erro: ${data?.error || data?.message || JSON.stringify(data).substring(0, 200)}`)
+      setBusyId(null)
+      return
+    }
+    setMessage(label)
     setBusyId(null)
     router.refresh()
   }
@@ -286,21 +331,77 @@ export function DocumentosHub({ projeto }: { projeto: ProjetoHub }) {
         </div>
       </div>
 
-      <DocumentSection title="Documentos recomendados" tone="blue" count={recomendacoes.length}>
-        {recomendacoes.map((recomendacao) => (
-          <Card key={recomendacao.nome}>
-            <CardHeader title={recomendacao.nome} subtitle={`Origem: ${recomendacao.origem}`} badge={recomendacao.tipo} />
-            <button
-              type="button"
-              disabled={busyId === recomendacao.nome}
-              onClick={() => createAndGenerate(recomendacao)}
-              className="mt-4 rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {busyId === recomendacao.nome ? <LoadingLabel label="Gerando..." /> : 'Criar e gerar com IA'}
-            </button>
-          </Card>
-        ))}
+      <DocumentSection
+        title="Documentos que a consultoria gera autonomamente"
+        tone="blue"
+        count={recomendacoesAutonomas.length}
+      >
+        {(['Ambiental', 'SST Documental', 'Sistema de Gestao / ESG', 'Homologacao'] as GrupoDocumento[]).map((grupo) => {
+          const itens = recomendacoesAutonomas.filter((recomendacao) => recomendacao.grupo === grupo)
+          if (!itens.length) return null
+
+          return (
+            <div key={grupo} className="rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+              <h3 className="mb-3 text-sm font-semibold text-blue-950">{grupo}</h3>
+              <div className="grid gap-3">
+                {itens.map((recomendacao) => (
+                  <Card key={recomendacao.nome}>
+                    <CardHeader title={recomendacao.nome} subtitle={`Origem: ${recomendacao.origem}`} badge="Consultoria autonoma" />
+                    <button
+                      type="button"
+                      disabled={busyId === recomendacao.nome}
+                      onClick={() => createAndGenerate(recomendacao)}
+                      className="mt-4 rounded-md bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                    >
+                      {busyId === recomendacao.nome ? <LoadingLabel label="Gerando..." /> : 'Criar e gerar com IA'}
+                    </button>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </DocumentSection>
+
+      <details className="rounded-lg border-l-4 border-orange-500 bg-white p-5 shadow-sm">
+        <summary className="cursor-pointer text-xl font-semibold text-slate-950">
+          Documentos que requerem parceria tecnica ({recomendacoesParceria.length})
+        </summary>
+        <div className="mt-4 grid gap-3">
+          {recomendacoesParceria.map((recomendacao) => (
+            <Card key={recomendacao.nome}>
+              <CardHeader title={recomendacao.nome} subtitle={recomendacao.motivoParceria || recomendacao.origem} badge="Requer parceria" />
+              <Action
+                variant="secondary"
+                disabled={busyId === recomendacao.nome}
+                onClick={() => createWaitingDocument(recomendacao, 'Documento marcado como aguardando parceiro tecnico.')}
+              >
+                {busyId === recomendacao.nome ? <LoadingLabel label="Marcando..." /> : 'Marcar como aguardando parceiro'}
+              </Action>
+            </Card>
+          ))}
+        </div>
+      </details>
+
+      <details className="rounded-lg border-l-4 border-slate-400 bg-white p-5 shadow-sm">
+        <summary className="cursor-pointer text-xl font-semibold text-slate-950">
+          Documentos exigiveis do cliente ({recomendacoesCliente.length})
+        </summary>
+        <div className="mt-4 grid gap-3">
+          {recomendacoesCliente.map((recomendacao) => (
+            <Card key={recomendacao.nome}>
+              <CardHeader title={recomendacao.nome} subtitle={`Cliente deve providenciar: ${recomendacao.origem}`} badge="Exigivel cliente" />
+              <Action
+                variant="secondary"
+                disabled={busyId === recomendacao.nome}
+                onClick={() => createWaitingDocument(recomendacao, 'Documento marcado como aguardando cliente.')}
+              >
+                {busyId === recomendacao.nome ? <LoadingLabel label="Marcando..." /> : 'Marcar como aguardando cliente'}
+              </Action>
+            </Card>
+          ))}
+        </div>
+      </details>
 
       <DocumentSection title="Em rascunho" tone="slate" count={countByStatus(projeto.documentos, 'pendente')}>
         {byStatus(projeto.documentos, 'pendente').map((documento) => (
@@ -407,21 +508,28 @@ function buildRecomendacoes(projeto: ProjetoHub): Recomendacao[] {
     avaliacao.itens
       .filter((item) => ['nao_atende', 'atende_parcialmente', 'precisa_validacao'].includes(item.status))
       .filter((item) => item.requisito.documentoEsperado)
-      .map((item) => ({
-        nome: item.requisito.documentoEsperado || 'Documento de evidência',
-        tipo: inferTipo(item.requisito.documentoEsperado || ''),
-        origem: `Identificado no gap do requisito ${item.requisito.codigo || item.requisito.titulo}`,
-        requisitosOrigem: [item.requisito.id],
-      })),
+      .map((item) => {
+        const nome = item.requisito.documentoEsperado || 'Documento de evidencia'
+        return {
+          nome,
+          tipo: inferTipo(nome),
+          origem: `Identificado no gap do requisito ${item.requisito.codigo || item.requisito.titulo}`,
+          requisitosOrigem: [item.requisito.id],
+          ...metadataDocumento(nome),
+        }
+      }),
   )
-  const setorDocs = documentosTipicosPorSetor(projeto.empresa.setorCodigo || projeto.empresa.setor || '')
+  const setorDocs = getDocumentosRecomendadosPorSetor(projeto.empresa.setorCodigo || projeto.empresa.setor || '')
   const all = [
     ...fromGaps,
-    ...setorDocs.map((nome) => ({
-      nome,
-      tipo: inferTipo(nome),
+    ...setorDocs.map((documento) => ({
+      nome: documento.nome,
+      tipo: inferTipo(documento.nome),
       origem: `Documento típico do setor ${projeto.empresa.setor || 'informado'}`,
       requisitosOrigem: [],
+      categoriaAutonomia: documento.categoriaAutonomia,
+      grupo: documento.grupo,
+      motivoParceria: documento.motivoParceria,
     })),
   ]
   const unique = new Map<string, Recomendacao>()
@@ -432,39 +540,27 @@ function buildRecomendacoes(projeto: ProjetoHub): Recomendacao[] {
   return Array.from(unique.values())
 }
 
-function documentosTipicosPorSetor(setor: string) {
-  const base = [
-    'Política Ambiental',
-    'Política SST',
-    'Matriz de Aspectos e Impactos',
-    'Inventário de Riscos',
-    'PGR',
-    'PCMSO',
-    'Plano de Emergência',
-    'PGRS',
-    'Procedimento de Controle de Resíduos',
-    'Matriz de Treinamentos',
-    'Plano de Ação',
-    'Inventário de Produtos Químicos',
-    'Procedimento de Gestão de FISPQ',
-  ]
-  if (normalize(setor).includes('quim')) {
-    return [
-      ...base,
-      'Plano de Atendimento a Emergência Química',
-      'Inventário de Substâncias Perigosas',
-      'Procedimento de Armazenamento Químico',
-    ]
-  }
-  return base
-}
-
 function inferTipo(nome: string) {
+  const info = getDocumentoInfo(nome)
+  if (info?.categoriaAutonomia === CATEGORIAS_DOCUMENTO.REQUER_PARCERIA_TECNICA) return 'requer_parceria_tecnica'
+  if (info?.categoriaAutonomia === CATEGORIAS_DOCUMENTO.EXIGIVEL_CLIENTE) return 'exigivel_cliente'
+  if (info?.categoriaAutonomia === CATEGORIAS_DOCUMENTO.CONSULTORIA_AUTONOMA) return 'geravel_ia'
+
   const n = normalize(nome)
   if (n.includes('pgrs')) return 'geravel_ia'
   if (['pgr', 'pcmso', 'avcb', 'alvara', 'licenca'].some((term) => n.includes(term))) return 'exigivel_cliente'
   if (n.includes('plano') || n.includes('politica') || n.includes('matriz') || n.includes('procedimento')) return 'geravel_ia'
   return 'semi_geravel'
+}
+
+function metadataDocumento(nome: string) {
+  const info = getDocumentoInfo(nome)
+
+  return {
+    categoriaAutonomia: info?.categoriaAutonomia || CATEGORIAS_DOCUMENTO.CONSULTORIA_AUTONOMA,
+    grupo: info?.grupo || 'Homologacao',
+    motivoParceria: info?.motivoParceria,
+  } satisfies Pick<Recomendacao, 'categoriaAutonomia' | 'grupo' | 'motivoParceria'>
 }
 
 function DocumentSection({

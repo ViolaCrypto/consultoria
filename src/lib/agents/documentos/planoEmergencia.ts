@@ -2,13 +2,17 @@ import { executarComRaciocinio } from '@/lib/agents/base/agenteCOT'
 import { gerarComAutoRevisao } from '@/lib/agents/base/agenteAutoRevisor'
 
 export async function gerarPlanoEmergencia(contexto: string, docProjetoId?: string) {
-  const systemPrompt =
-    'Você é especialista em resposta a emergências industriais, SST e gestão ambiental. Gere plano de emergência específico para o setor e processos reais da empresa.'
+  const systemPrompt = [
+    'Voce e especialista senior em resposta a emergencias industriais, SST e gestao ambiental.',
+    'Gere Plano de Atendimento a Emergencias (PAE) em markdown, especifico para o setor e processos reais da empresa.',
+    'Estrutura obrigatoria: Objetivo, Escopo, Referencias, Cenarios de emergencia, Classificacao de emergencia, Sistema de alarme, Brigada, Rotas de fuga, Pontos de encontro, Comunicacao externa, Recursos, Treinamentos, Simulados, Registros e Revisao.',
+    'Para cada cenario, trazer: descricao, causas provaveis, impactos, procedimento de resposta, recursos necessarios, responsaveis, comunicacao, isolamento, controle, registro e retorno a normalidade.',
+    'Cite NR-23, requisitos de bombeiros, ISO 14001/45001 e normas aplicaveis quando pertinente.',
+    'Nao invente layout ou brigada existente; se nao houver evidencia, marque precisa validacao. Documento com 800 a 1500 palavras.',
+  ].join('\n')
   const userPrompt = [
-    'Gere um Plano de Emergência em markdown.',
-    'Use produtos químicos, processos, layout se disponível, brigada existente, recursos disponíveis e dados extraídos dos arquivos.',
-    'Para cada cenário, descreva: procedimento de resposta, recursos necessários, responsáveis, comunicação, isolamento, controle, registro e retorno à normalidade.',
-    'Inclua cenários específicos para o setor e marque itens sem evidência como "precisa validação".',
+    'Gere um Plano de Emergencia em markdown.',
+    'Use produtos quimicos, processos, layout se disponivel, brigada existente, recursos disponiveis e dados extraidos dos arquivos.',
     '',
     'Contexto completo:',
     contexto,
@@ -16,12 +20,15 @@ export async function gerarPlanoEmergencia(contexto: string, docProjetoId?: stri
 
   const { raciocinio } = await executarComRaciocinio(systemPrompt, userPrompt, undefined, {
     docProjetoId,
+    model: 'gpt-4o',
+    temperature: 0.3,
+    maxTokens: 3500,
   })
   const revisao = await gerarComAutoRevisao(userPrompt, contexto, [
-    'Tem cenários específicos do setor e dos processos?',
-    'Tem responsáveis nominais ou papéis claramente definidos?',
+    'Tem cenarios especificos do setor e dos processos?',
+    'Tem responsaveis nominais ou papeis claramente definidos?',
     'Tem recursos listados?',
-    'Tem fluxo de acionamento e comunicação?',
+    'Tem fluxo de acionamento e comunicacao?',
   ])
 
   return {

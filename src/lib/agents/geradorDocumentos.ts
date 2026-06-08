@@ -1,12 +1,17 @@
 import { executarComRaciocinio } from '@/lib/agents/base/agenteCOT'
+import { gerarCodigoConduta } from '@/lib/agents/documentos/codigoConduta'
 import { gerarInventarioRiscos } from '@/lib/agents/documentos/inventarioRiscos'
 import { gerarMatrizAspectosImpactos } from '@/lib/agents/documentos/matrizAspectosImpactos'
+import { gerarMatrizTreinamentos } from '@/lib/agents/documentos/matrizTreinamentos'
 import { gerarPCMSO } from '@/lib/agents/documentos/pcmso'
 import { gerarPGR } from '@/lib/agents/documentos/pgr'
 import { gerarPGRS } from '@/lib/agents/documentos/pgrs'
 import { gerarPlanoEmergencia } from '@/lib/agents/documentos/planoEmergencia'
+import { gerarPoliticaCanalDenuncia } from '@/lib/agents/documentos/politicaCanalDenuncia'
 import { gerarPoliticaAmbiental } from '@/lib/agents/documentos/politicaAmbiental'
 import { gerarPoliticaSST } from '@/lib/agents/documentos/politicaSST'
+import { gerarProcedimentoAPR } from '@/lib/agents/documentos/procedimentoAPR'
+import { gerarProcedimentoAuditoriaInterna } from '@/lib/agents/documentos/procedimentoAuditoriaInterna'
 import { CONSULTORIA_CONFIG } from '@/lib/config/consultoria'
 import { montarContextoCompleto } from '@/lib/contextoDocumental'
 import { buscarPadroesSetor, normalizarSetor } from '@/lib/memoria'
@@ -59,12 +64,18 @@ function detectarTipoDocumento(nome: string) {
   if (n.includes('politica') && (n.includes('sst') || n.includes('seguranca') || n.includes('saude'))) {
     return 'politica_sst'
   }
-  if (n.includes('pgrs') || n.includes('gerenciamento de residuos')) return 'pgrs'
+  if (n.includes('pgrs') || (n.includes('residuos') && n.includes('solidos')) || n.includes('gerenciamento de residuos')) return 'pgrs'
   if (n === 'pgr' || n.includes('programa de gerenciamento de riscos')) return 'pgr'
   if (n.includes('pcmso') || n.includes('controle medico')) return 'pcmso'
   if (n.includes('matriz') && n.includes('aspecto')) return 'matriz_aspectos'
   if (n.includes('inventario') && n.includes('risco')) return 'inventario_riscos'
-  if (n.includes('plano de emergencia') || n.includes('pae')) return 'plano_emergencia'
+  if (n.includes('apr') || n.includes('analise preliminar')) return 'apr'
+  if (n.includes('plano') && n.includes('emergencia')) return 'plano_emergencia'
+  if (n.includes('pae')) return 'plano_emergencia'
+  if (n.includes('matriz') && n.includes('treinamento')) return 'matriz_treinamentos'
+  if (n.includes('codigo') && n.includes('conduta')) return 'codigo_conduta'
+  if (n.includes('canal') && n.includes('denuncia')) return 'politica_canal_denuncia'
+  if (n.includes('auditoria') && n.includes('interna')) return 'auditoria_interna'
   if (n.includes('procedimento')) return 'procedimento'
   if (n.includes('plano de acao')) return 'plano_acao'
 
@@ -255,6 +266,26 @@ export async function gerarDocumento(
 
   if (tipo === 'pgrs') {
     return withGeradoEm(await gerarPGRS(contextoCompleto, docProjeto.id))
+  }
+
+  if (tipo === 'apr') {
+    return withGeradoEm(await gerarProcedimentoAPR(contextoCompleto, docProjeto.id))
+  }
+
+  if (tipo === 'matriz_treinamentos') {
+    return withGeradoEm(await gerarMatrizTreinamentos(contextoCompleto, docProjeto.id))
+  }
+
+  if (tipo === 'codigo_conduta') {
+    return withGeradoEm(await gerarCodigoConduta(contextoCompleto, docProjeto.id))
+  }
+
+  if (tipo === 'politica_canal_denuncia') {
+    return withGeradoEm(await gerarPoliticaCanalDenuncia(contextoCompleto, docProjeto.id))
+  }
+
+  if (tipo === 'auditoria_interna') {
+    return withGeradoEm(await gerarProcedimentoAuditoriaInterna(contextoCompleto, docProjeto.id))
   }
 
   return gerarDocumentoGenerico(docProjeto, empresa, contextoCompleto)

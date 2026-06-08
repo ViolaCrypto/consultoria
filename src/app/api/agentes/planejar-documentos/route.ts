@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { planejarDocumentos } from '@/lib/agents/planejadorDocumentos'
+import {
+  CATEGORIAS_DOCUMENTO,
+  getDocumentoInfo,
+  getDocumentosRecomendadosPorSetor,
+} from '@/lib/ontologia/documentos'
 import { getProjetoDashboard } from '@/lib/projeto-dashboard'
 import { prisma } from '@/lib/prisma'
 
@@ -137,7 +142,7 @@ function documentosDosGaps(gapAnalysis: unknown): DocumentoRecomendado[] {
         motivo: `Identificado no gap do requisito ${item.requisito?.codigo || item.requisito?.titulo || item.requisitoId}`,
         dependencias: [],
         requisitosOrigem: item.requisito?.id ? [item.requisito.id] : [],
-        status: tipo === 'exigivel_cliente' ? 'aguardando_cliente' : 'pendente',
+        status: tipo === 'exigivel_cliente' || tipo === 'requer_parceria_tecnica' ? 'aguardando_cliente' : 'pendente',
       }
     })
 }
@@ -154,44 +159,26 @@ type GapItem = {
 }
 
 function documentosTipicosPorSetor(setor: string, obrigatorios: string[]): DocumentoRecomendado[] {
-  const base = [
-    'PolÃ­tica Ambiental',
-    'PolÃ­tica SST',
-    'Matriz de Aspectos e Impactos',
-    'InventÃ¡rio de Riscos',
-    'PGR',
-    'PCMSO',
-    'Plano de EmergÃªncia',
-    'PGRS',
-    'Procedimento de Controle de ResÃ­duos',
-    'Matriz de Treinamentos',
-    'Plano de AÃ§Ã£o',
-    'InventÃ¡rio de Produtos QuÃ­micos',
-    'Procedimento de GestÃ£o de FISPQ',
+  const documentos = [
+    ...getDocumentosRecomendadosPorSetor(setor),
+    ...obrigatorios.map((nome) => ({
+      nome,
+      categoriaAutonomia: CATEGORIAS_DOCUMENTO.EXIGIVEL_CLIENTE,
+    })),
   ]
-  const setorNormalizado = normalize(setor)
-  const nomes = setorNormalizado.includes('quim')
-    ? [
-        ...base,
-        'Plano de Atendimento a EmergÃªncia QuÃ­mica',
-        'InventÃ¡rio de SubstÃ¢ncias Perigosas',
-        'Procedimento de Armazenamento QuÃ­mico',
-      ]
-    : setorNormalizado.includes('metal')
-      ? base
-      : [...obrigatorios, 'PolÃ­tica Ambiental', 'PolÃ­tica SST', 'Plano de AÃ§Ã£o']
 
-  return nomes.map((nome) => {
+  return documentos.map((documento) => {
+    const nome = documento.nome
     const tipo = inferTipo(nome)
 
     return {
       nome,
       tipo,
-      prioridade: tipo === 'exigivel_cliente' ? 5 : 3,
+      prioridade: tipo === 'exigivel_cliente' || tipo === 'requer_parceria_tecnica' ? 5 : 3,
       motivo: `Documento tÃ­pico ou obrigatÃ³rio do setor ${setor || 'informado'}.`,
       dependencias: [],
       requisitosOrigem: [],
-      status: tipo === 'exigivel_cliente' ? 'aguardando_cliente' : 'pendente',
+      status: tipo === 'exigivel_cliente' || tipo === 'requer_parceria_tecnica' ? 'aguardando_cliente' : 'pendente',
     }
   })
 }
@@ -235,6 +222,17 @@ function dedupeDocumentos(
 }
 
 function inferTipo(nome: string) {
+  const info = getDocumentoInfo(nome)
+  if (info?.categoriaAutonomia === CATEGORIAS_DOCUMENTO.REQUER_PARCERIA_TECNICA) {
+    return 'requer_parceria_tecnica'
+  }
+  if (info?.categoriaAutonomia === CATEGORIAS_DOCUMENTO.EXIGIVEL_CLIENTE) {
+    return 'exigivel_cliente'
+  }
+  if (info?.categoriaAutonomia === CATEGORIAS_DOCUMENTO.CONSULTORIA_AUTONOMA) {
+    return 'geravel_ia'
+  }
+
   const n = normalize(nome)
   if (n.includes('pgrs')) {
     return 'geravel_ia'
@@ -260,7 +258,9 @@ function normalizeStatus(status: string | undefined, tipo: string): 'pendente' |
     return status
   }
 
-  return tipo === 'exigivel_cliente' ? 'aguardando_cliente' : 'pendente'
+  return tipo === 'exigivel_cliente' || tipo === 'requer_parceria_tecnica'
+    ? 'aguardando_cliente'
+    : 'pendente'
 }
 
 function normalize(value: string) {
