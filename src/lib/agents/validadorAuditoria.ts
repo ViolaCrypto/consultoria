@@ -121,6 +121,40 @@ export function validarComoAuditor(
     }
   }
 
+  if (tipo === 'politica_ambiental') {
+    const temNRsTrabalhistas = /NR[\s-]?\d{1,2}/i.test(conteudo)
+    if (temNRsTrabalhistas) {
+      problemas.push({
+        severidade: 'critica',
+        tipo: 'erro_tecnico',
+        descricao:
+          'Politica Ambiental cita NRs (normas trabalhistas). NRs sao de SST, nao ambientais. Use ISO 14001, CONAMA, leis ambientais e ABNT NBR ambientais.',
+      })
+      score.total -= 25
+    }
+
+    const subsecoesObrigatorias = ['4.1', '4.2', '4.3', '4.4', '4.5', '4.6']
+    const faltantes = subsecoesObrigatorias.filter((sub) => !conteudo.includes(sub))
+    if (faltantes.length > 0) {
+      problemas.push({
+        severidade: 'alta',
+        tipo: 'estrutura',
+        descricao: `Subsecoes faltantes em Diretrizes Ambientais: ${faltantes.join(', ')}`,
+      })
+      score.total -= 10
+    }
+
+    const temISO14001 = /ISO\s*14001/i.test(conteudo)
+    if (!temISO14001) {
+      problemas.push({
+        severidade: 'critica',
+        tipo: 'norma_obrigatoria',
+        descricao: 'Politica Ambiental nao cita ISO 14001 - obrigatorio',
+      })
+      score.total -= 20
+    }
+  }
+
   const temEmoji = /[\u{1F300}-\u{1F9FF}]/u.test(conteudo)
   if (temEmoji) {
     problemas.push({
@@ -179,6 +213,7 @@ function normalizarTipo(tipoDocumento: string) {
     .replace(/[\u0300-\u036f]/g, '')
 
   if (tipo.includes('pcmso')) return 'pcmso'
+  if (tipo.includes('politica') && tipo.includes('ambiental')) return 'politica_ambiental'
   if (tipo.includes('pgrs')) return 'pgrs'
   if (tipo.includes('pgr')) return 'pgr'
   if (tipo.includes('inventario') && tipo.includes('risco')) return 'inventario_riscos'

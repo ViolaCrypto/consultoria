@@ -148,7 +148,36 @@ export async function exportarPDF(documento: DocumentoExport, empresa: EmpresaEx
     y += 5
     doc.setLineWidth(0.3)
     doc.line(margemEsq, y, 210 - margemDir, y)
-    y += 10
+    drawVersionTable()
+  }
+
+  function drawVersionTable() {
+    const tabelaY = 28
+    const colWidth = larguraTexto / 3
+    const codigo = getCodigoDocumento(documento)
+    const revisao = `Rev. ${String(Math.max((documento.versao || 1) - 1, 0)).padStart(2, '0')}`
+
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setDrawColor(180)
+    doc.rect(margemEsq, tabelaY, larguraTexto, 12)
+    doc.line(margemEsq + colWidth, tabelaY, margemEsq + colWidth, tabelaY + 12)
+    doc.line(margemEsq + colWidth * 2, tabelaY, margemEsq + colWidth * 2, tabelaY + 12)
+
+    doc.setFontSize(7)
+    doc.setTextColor(100)
+    doc.text('CODIGO', margemEsq + 2, tabelaY + 3)
+    doc.text('REVISAO', margemEsq + colWidth + 2, tabelaY + 3)
+    doc.text('DATA', margemEsq + colWidth * 2 + 2, tabelaY + 3)
+
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(0)
+    doc.text(codigo, margemEsq + 2, tabelaY + 9)
+    doc.text(revisao, margemEsq + colWidth + 2, tabelaY + 9)
+    doc.text(new Date().toLocaleDateString('pt-BR'), margemEsq + colWidth * 2 + 2, tabelaY + 9)
+
+    y = tabelaY + 18
   }
 
   function addPage() {
@@ -353,6 +382,41 @@ function cleanMarkdown(value: string) {
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
     .replace(/`(.+?)`/g, '$1')
+}
+
+function getCodigoDocumento(documento: DocumentoExport) {
+  const nome = normalizar(documento.nome)
+  const tipo = normalizar(documento.tipo)
+  const alvo = `${nome} ${tipo}`
+
+  if (alvo.includes('politica ambiental')) return 'AMB-POL-001'
+  if (alvo.includes('politica') && (alvo.includes('sst') || alvo.includes('seguranca') || alvo.includes('saude'))) {
+    return 'SST-POL-001'
+  }
+  if (alvo.includes('pcmso')) return 'SST-PCM-001'
+  if (alvo.includes('pgrs')) return 'AMB-PGR-001'
+  if (alvo.includes('pgr') || alvo.includes('programa de gerenciamento de riscos')) return 'SST-PGR-001'
+  if (alvo.includes('matriz') && alvo.includes('aspecto')) return 'AMB-MAT-001'
+  if (alvo.includes('inventario') && alvo.includes('risco')) return 'SST-INV-001'
+  if (alvo.includes('plano de emergencia') || alvo.includes('pae')) return 'SST-PAE-001'
+
+  return `DOC-${slugify(documento.nome).slice(0, 12).toUpperCase()}`
+}
+
+function normalizar(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/Ã£|ã£/g, 'a')
+    .replace(/Ã¡|ã¡/g, 'a')
+    .replace(/Ã©|ã©/g, 'e')
+    .replace(/Ãª|ãª/g, 'e')
+    .replace(/Ã­|ã­/g, 'i')
+    .replace(/Ã³|ã³/g, 'o')
+    .replace(/Ãµ|ãµ/g, 'o')
+    .replace(/Ãº|ãº/g, 'u')
+    .replace(/Ã§|ã§/g, 'c')
 }
 
 function slugify(value: string) {
